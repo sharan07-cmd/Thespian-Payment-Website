@@ -1,0 +1,50 @@
+:root {
+  --bg: #170d12;
+  --bg-panel: #221219;
+  --bg-panel-raised: #2b1620;
+  --curtain: #7a1f2b;
+  --curtain-deep: #4f141c;
+  --gold: #c9a227;
+  --gold-bright: #e6c15a;
+  --booked: #3d2c31;
+  --booked-text: #8a7078;
+  --ink: #f3e9dd;
+  --ink-muted: #b79c8a;
+  --aisle-line: rgba(201, 162, 39, 0.18);
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(ellipse at top, #241318 0%, var(--bg) 55%);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--gold);
+  color: #1a0f10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
