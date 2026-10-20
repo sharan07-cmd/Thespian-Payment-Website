@@ -287,17 +287,19 @@ export default function SeatMap({ showTitle, showSubtitle }) {
         <style jsx>{`
           .ticketSuccessPage {
             min-height: 100vh;
-            padding: 40px 16px;
+            padding: 24px 16px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
             color: var(--ink);
+            box-sizing: border-box;
           }
 
           .ticketSuccessCard {
             width: 100%;
             max-width: 460px;
-            padding: 26px;
+            padding: 20px;
+            box-sizing: border-box;
             border: 1px solid rgba(201, 162, 39, 0.3);
             border-radius: 16px;
             background: var(--bg-panel);
@@ -313,15 +315,15 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           }
 
           .successIcon {
-            width: 54px;
-            height: 54px;
-            margin: 24px auto 14px;
+            width: 50px;
+            height: 50px;
+            margin: 16px auto 10px;
             display: grid;
             place-items: center;
             border: 1px solid var(--gold);
             border-radius: 50%;
             color: var(--gold);
-            font-size: 30px;
+            font-size: 28px;
           }
 
           h1 {
@@ -337,8 +339,8 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           }
 
           .ticketPreview {
-            margin-top: 24px;
-            padding: 20px;
+            margin-top: 18px;
+            padding: 16px;
             border: 1px dashed var(--gold);
             border-radius: 12px;
             text-align: left;
@@ -361,27 +363,27 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           }
 
           .ticketCodeItem {
-            padding: 12px 0;
+            padding: 8px 0;
             text-align: center;
             border-bottom: 1px dashed rgba(201, 162, 39, 0.3);
           }
 
           .ticketCodeItem h2 {
-            margin: 10px 0;
+            margin: 6px 0;
             color: var(--gold);
-            font-size: 25px;
+            font-size: 24px;
             overflow-wrap: anywhere;
           }
 
           .ticketCodeItem p {
-            margin: 0 0 8px;
+            margin: 0 0 5px;
             color: var(--ink-muted);
             font-size: 13px;
           }
 
           .ticketDivider {
             border-top: 1px dashed rgba(201, 162, 39, 0.45);
-            margin: 16px 0;
+            margin: 12px 0;
           }
 
           .ticketDetail {
@@ -389,7 +391,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
             justify-content: space-between;
             align-items: flex-start;
             gap: 12px;
-            padding: 9px 0;
+            padding: 6px 0;
             font-size: 13px;
           }
 
@@ -440,7 +442,15 @@ export default function SeatMap({ showTitle, showSubtitle }) {
 
           @media (max-width: 480px) {
             .ticketSuccessCard {
-              padding: 20px 15px;
+              padding: 18px 14px;
+            }
+            
+            .ticketSuccessPage {
+              padding: 16px 12px;
+            }
+              
+            .ticketCodeItem h2 {
+              font-size: 22px;
             }
           }
         `}</style>
