@@ -170,7 +170,9 @@ export async function POST(request) {
     const { data: tickets, error: ticketError } =
       await supabaseAdmin
         .from("tickets")
-        .select("id, booking_id, ticket_code, seat_id, created_at")
+        .select(
+          "id, booking_id, ticket_code, seat_id, created_at, barcode_token"
+        )
         .eq("booking_id", bookingId)
         .order("seat_id", { ascending: true });
 
@@ -225,6 +227,7 @@ export async function POST(request) {
         ticketCode: ticket.ticket_code,
         seatId: ticket.seat_id,
         createdAt: ticket.created_at,
+        barcodeToken: ticket.barcode_token,
       })),
     });
   } catch (error) {
