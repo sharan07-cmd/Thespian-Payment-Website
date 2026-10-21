@@ -5,6 +5,7 @@ import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { generateSeatLayout, SEAT_PRICE } from "@/lib/seatLayout";
 import Checkout from "@/components/Checkout";
+import QRCode from "qrcode";
 
 export default function SeatMap({ showTitle, showSubtitle }) {
   const { rows, totalSeats } = useMemo(() => generateSeatLayout(), []);
@@ -154,7 +155,10 @@ export default function SeatMap({ showTitle, showSubtitle }) {
   const total = selectedList.length * SEAT_PRICE;
 
   
-  function downloadTicketsPDF() {
+  
+  
+
+  async function downloadTicketsPDF() {
     if (
       !confirmedTicket ||
       !Array.isArray(confirmedTicket.tickets) ||
@@ -163,45 +167,254 @@ export default function SeatMap({ showTitle, showSubtitle }) {
       return;
     }
 
-    const doc = new jsPDF();
+    // Landscape A4: 297 mm × 210 mm
+    const doc = new jsPDF("landscape", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-    confirmedTicket.tickets.forEach((ticket, index) => {
-      if (index > 0) {
-        doc.addPage();
+    const gold = [218, 178, 76];
+    const paleGold = [255, 226, 145];
+    const black = [13, 12, 9];
+    const white = [255, 250, 235];
+    const muted = [192, 181, 151];
+
+    const tickets = confirmedTicket.tickets;
+    const eventTitle = confirmedTicket.showTitle || "Event";
+    const bookingId = confirmedTicket.bookingId || "N/A";
+
+    for (const [index, ticket] of tickets.entries()) {
+      if (index > 0) doc.addPage("a4", "landscape");
+
+      const code = String(ticket.ticketCode || "N/A");
+      const seatId = String(ticket.seatId || "N/A");
+
+      // Each ticket must have its own unique barcode token.
+      if (!ticket.barcodeToken) {
+        window.alert(
+          "A ticket QR code is missing. Please contact the event team."
+        );
+        return;
       }
 
-      doc.setFontSize(20);
-      doc.text("THESPIAN TICKETS", 105, 25, {
-        align: "center",
-      });
-
-      doc.setFontSize(16);
-      doc.text("Booking Confirmed", 105, 40, {
-        align: "center",
-      });
-
-      doc.setFontSize(12);
-      doc.text(`Event: ${confirmedTicket.showTitle || "Event"}`, 20, 60);
-      doc.text(`Ticket Code: ${ticket.ticketCode}`, 20, 80);
-      doc.text(`Seat: ${ticket.seatId}`, 20, 95);
-      doc.text(`Booking Reference: ${confirmedTicket.bookingId}`, 20, 110);
-      doc.text(
-        `Ticket ${index + 1} of ${confirmedTicket.tickets.length}`,
-        20,
-        125
+      // The QR opens the organiser's protected ticket-verification page.
+      const scanUrl = new URL(
+        "/organizer/scan",
+        window.location.origin
       );
 
-      doc.setFontSize(10);
-      doc.text("Please keep this ticket for entry.", 20, 145);
-    });
+      scanUrl.searchParams.set("token", ticket.barcodeToken);
 
-    doc.save(
-      `thespian-tickets-${confirmedTicket.bookingId}.pdf`
-    );
+      const qrDataUrl = await QRCode.toDataURL(scanUrl.toString(), {
+        width: 320,
+        margin: 2,
+        errorCorrectionLevel: "M",
+      });
+
+      // Background
+      doc.setFillColor(18, 17, 13);
+      doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+      // Outer gold frame
+      doc.setDrawColor(...gold);
+      doc.setLineWidth(0.6);
+      doc.roundedRect(7, 7, pageWidth - 14, pageHeight - 14, 3, 3, "S");
+
+      // Straight horizontal ticket
+      const x = 22;
+      const y = 32;
+      const w = 253;
+      const h = 108;
+      const stubW = 43;
+
+      // Ticket shadow
+      doc.setFillColor(5, 5, 4);
+      doc.roundedRect(x + 2, y + 2, w, h, 3, 3, "F");
+
+      // Main ticket body
+      doc.setFillColor(...black);
+      doc.setDrawColor(...gold);
+      doc.setLineWidth(1);
+      doc.roundedRect(x, y, w, h, 3, 3, "FD");
+
+      // Gold stub
+      doc.setFillColor(202, 160, 52);
+      doc.setDrawColor(...paleGold);
+      doc.roundedRect(x, y, stubW, h, 3, 3, "FD");
+
+      // Straighten the stub's right edge
+      doc.setFillColor(202, 160, 52);
+      doc.rect(x + stubW - 3, y + 1, 4, h - 2, "F");
+
+      // Perforation effect
+      doc.setDrawColor(91, 69, 26);
+      doc.setLineWidth(0.5);
+
+      for (let py = y + 4; py < y + h - 4; py += 5) {
+        doc.line(
+          x + stubW,
+          py,
+          x + stubW + 2,
+          py + 2.5
+        );
+      }
+
+
+
+      // Code and admission text on stub
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+      doc.setTextColor(20, 16, 7);
+      doc.text(
+        "ADMIT ONE",
+        x + stubW / 2,
+        y + 91,
+        { align: "center" }
+      );
+
+      
+
+      // Main ticket content
+      const contentX = x + stubW + 8;
+      const contentRight = x + w - 8;
+      const contentW = contentRight - contentX;
+      const centerX = (contentX + contentRight) / 2;
+
+      // Brand
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...paleGold);
+      doc.text("T H E S P I A N   T I C K E T S", centerX, y + 13, {
+        align: "center",
+      });
+
+      doc.setDrawColor(...gold);
+      doc.setLineWidth(0.4);
+      doc.line(contentX + 5, y + 18, contentRight - 5, y + 18);
+
+      // Event title
+      doc.setFont("times", "bolditalic");
+      doc.setFontSize(22);
+      doc.setTextColor(...gold);
+
+      const titleLines = doc
+        .splitTextToSize(eventTitle, contentW - 10)
+        .slice(0, 2);
+
+      doc.text(titleLines, centerX, y + 39, {
+        align: "center",
+        lineHeightFactor: 1.1,
+      });
+
+      // Ticket subtitle
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(...white);
+      doc.text("THEATRE TICKET", centerX, y + 52, {
+        align: "center",
+      });
+
+      // Gold confirmation strip
+      doc.setFillColor(202, 160, 52);
+      doc.roundedRect(centerX - 34, y + 58, 68, 9, 1.5, 1.5, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(20, 17, 10);
+      doc.text("BOOKING CONFIRMED", centerX, y + 64, {
+        align: "center",
+      });
+
+      // Seat details
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(...muted);
+      doc.text("RESERVED SEAT", contentX + 5, y + 81);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(...paleGold);
+      doc.text(seatId, contentX + 5, y + 92);
+
+      // Ticket count
+      // QR code for organiser verification
+      const qrSize = 25;
+      const qrX = x + (stubW - qrSize) / 2;
+      const qrY = y + 20;
+
+      doc.addImage(
+        qrDataUrl,
+        "PNG",
+        qrX,
+        qrY,
+        qrSize,
+        qrSize
+      );
+
+      // QR caption
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5);
+      doc.setTextColor(20,16, 7);
+      doc.text(
+        "SCAN TO VERIFY",
+        qrX + qrSize / 2,
+        qrY + qrSize + 8,
+        { align: "center" }
+      );
+
+      // Ticket count, positioned below the QR caption
+      doc.setFontSize(7);
+      doc.setTextColor(...white);
+      doc.text(
+        `TICKET ${index + 1} OF ${tickets.length}`,
+        contentRight - 5,
+        y + 101,
+        { align: "right" }
+      );
+
+      // Details beneath the ticket
+      doc.setDrawColor(...gold);
+      doc.setLineWidth(0.4);
+      doc.line(25, 151, pageWidth - 25, 151);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...white);
+      doc.text(
+        doc.splitTextToSize(code, 105).slice(0, 2),
+        27,
+        171
+      );
+
+      // Booking reference
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(...gold);
+      doc.text("BOOKING REFERENCE", 160, 163);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...white);
+      doc.text(
+        doc.splitTextToSize(String(bookingId), 105).slice(0, 2),
+        160,
+        171
+      );
+
+      // Footer
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+      doc.text(
+        "YOUR NIGHT AT THE THEATRE AWAITS",
+        pageWidth / 2,
+        195,
+        { align: "center" }
+      );
+    }
+
+    doc.save(`thespian-tickets-${bookingId}.pdf`);
   }
 
-
-  
   if (confirmedTicket) {
     return (
       <main className="ticketSuccessPage">
