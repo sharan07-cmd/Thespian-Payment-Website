@@ -86,7 +86,7 @@ export default function OrganizerCheckIn({showId}) {
       requestInProgress.current = false;
       setLoading(false);
     }
-  }, [action]);
+  }, [action, showId]);
 
   const ticket = result?.ticket;
 
