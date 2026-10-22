@@ -361,12 +361,12 @@
             justify-content: center;
             align-items: flex-start;
             color: var(--ink);
-            box-sizing: border-box;
           }
 
           .checkoutCard {
             width: 100%;
             max-width: 460px;
+            margin-top: -35px;
             padding: 22px;
             border: 1px solid rgba(201, 162, 39, 0.25);
             border-radius: 16px;
