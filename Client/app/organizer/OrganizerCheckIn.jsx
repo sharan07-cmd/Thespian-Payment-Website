@@ -48,6 +48,12 @@ export default function OrganizerCheckIn({showId}) {
     setResult(null);
     setError("");
 
+    console.log("Ticket scan request:", {
+      token,
+      action,
+      showId,
+    });
+
     try {
       const response = await fetch("/api/organizer/check-in", {
         method: "POST",
@@ -122,7 +128,7 @@ export default function OrganizerCheckIn({showId}) {
                 : "Unknown show"}
           </span>
         </p>
-        
+
         <p className="mt-1 text-sm text-stone-400">
           Scan the same ticket at entry, during interval exit, and re-entry.
         </p>
