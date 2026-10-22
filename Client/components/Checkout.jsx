@@ -356,11 +356,12 @@
         <style jsx>{`
           .checkoutPage {
             min-height: 100vh;
-            padding: 8px 16px 24px;
+            padding: 0 16px 24px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
             color: var(--ink);
+            box-sizing: border-box;
           }
 
           .checkoutCard {
