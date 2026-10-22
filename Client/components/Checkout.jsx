@@ -356,7 +356,7 @@
         <style jsx>{`
           .checkoutPage {
             min-height: 100vh;
-            padding: 24px 16px 36px;
+            padding: 8px 16px 24px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
