@@ -1,21 +1,22 @@
 
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import QRScanner from "./QRScanner";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function extractToken(value) {
-  const text = value.trim();
+  const text = String(value ?? "").trim();
 
-  // QR codes may contain the token directly or a URL containing ?token=...
   try {
     const url = new URL(text);
     const token = url.searchParams.get("token");
+
     if (token) return token.trim();
   } catch {
-    // The QR contents may be a raw UUID rather than a URL.
+    // The QR code may contain a raw UUID.
   }
 
   return text;
@@ -26,8 +27,14 @@ export default function OrganizerCheckIn() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [scanSession, setScanSession] = useState(0);
+
+  // Unlike React state, this lock changes immediately.
+  const requestInProgress = useRef(false);
 
   const verifyToken = useCallback(async (rawValue) => {
+    if (requestInProgress.current) return;
+
     const token = extractToken(rawValue);
 
     if (!UUID_RE.test(token)) {
@@ -36,8 +43,7 @@ export default function OrganizerCheckIn() {
       return;
     }
 
-    if (loading) return;
-
+    requestInProgress.current = true;
     setLoading(true);
     setResult(null);
     setError("");
@@ -49,23 +55,46 @@ export default function OrganizerCheckIn() {
         body: JSON.stringify({ token }),
       });
 
-      const data = await response.json();
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The server returned an unreadable response.");
+      }
 
       if (!response.ok) {
-        setError(data.error || "Ticket verification failed.");
+        setError(data?.error || "Ticket verification failed.");
+        return;
+      }
+
+      if (!data?.success) {
+        setError(data?.error || "The server did not confirm this check-in.");
         return;
       }
 
       setResult(data);
       setManualToken("");
-    } catch {
-      setError("Unable to reach the server. Please try again.");
+    } catch (err) {
+      setError(
+        err?.message === "Failed to fetch"
+          ? "Connection interrupted. Check your network and verify the ticket status before retrying."
+          : err?.message || "Unable to reach the server. Please try again."
+      );
     } finally {
+      requestInProgress.current = false;
       setLoading(false);
     }
-  }, [loading]);
+  }, []);
 
-  const ticket = result?.ticket;
+  const ticket = result?.ticket ?? result;
+
+  function scanNextTicket() {
+    setResult(null);
+    setError("");
+    setManualToken("");
+    setScanSession((value) => value + 1);
+  }
 
   return (
     <section className="rounded-2xl border border-[#574629] bg-[#171612] p-5 sm:p-7">
@@ -73,6 +102,7 @@ export default function OrganizerCheckIn() {
         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#d6b66b]/10 text-2xl text-[#d6b66b]">
           ▦
         </div>
+
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#d6b66b]">
             Entry management
@@ -86,7 +116,17 @@ export default function OrganizerCheckIn() {
         </div>
       </div>
 
-      <QRScanner onScan={verifyToken} disabled={loading} />
+      <QRScanner
+        onScan={verifyToken}
+        disabled={loading}
+        restartKey={scanSession}
+      />
+
+      {loading && (
+        <div role="status" className="mt-4 rounded-lg bg-stone-900 p-4 text-sm text-stone-200">
+          Verifying ticket securely…
+        </div>
+      )}
 
       <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-widest text-stone-500">
         <div className="h-px flex-1 bg-stone-800" />
@@ -106,8 +146,10 @@ export default function OrganizerCheckIn() {
           onChange={(event) => setManualToken(event.target.value)}
           placeholder="Paste ticket token or QR URL"
           aria-label="Ticket token or QR URL"
+          autoComplete="off"
           className="min-w-0 flex-1 rounded-lg border border-stone-700 bg-[#0f0f0e] px-4 py-3 text-sm text-white outline-none focus:border-[#d6b66b]"
         />
+
         <button
           type="submit"
           disabled={loading || !manualToken.trim()}
@@ -124,6 +166,7 @@ export default function OrganizerCheckIn() {
         >
           <p className="font-bold">Verification unsuccessful</p>
           <p className="mt-1">{error}</p>
+
           {error.toLowerCase().includes("log in") && (
             <a className="mt-3 inline-block underline" href="/organizer/login">
               Go to organiser login
@@ -140,28 +183,33 @@ export default function OrganizerCheckIn() {
           <p className="font-bold text-emerald-300">
             ✓ Check-in successful
           </p>
+
           <p className="mt-1 text-sm text-emerald-100/80">
-            {result.message}
+            {result.message || "Ticket verified successfully."}
           </p>
 
           <dl className="mt-4 divide-y divide-emerald-900/70 text-sm">
             <div className="flex justify-between gap-4 py-3">
               <dt className="text-stone-400">Ticket code</dt>
               <dd className="break-all text-right font-semibold text-white">
-                {ticket.ticketCode || "N/A"}
+                {ticket.ticketCode ?? ticket.ticket_code ?? "N/A"}
               </dd>
             </div>
+
             <div className="flex justify-between gap-4 py-3">
               <dt className="text-stone-400">Seat</dt>
               <dd className="text-right font-semibold text-white">
-                {ticket.seatId || "N/A"}
+                {ticket.seatId ?? ticket.seat_id ?? "N/A"}
               </dd>
             </div>
+
             <div className="flex justify-between gap-4 py-3">
               <dt className="text-stone-400">Checked in at</dt>
               <dd className="text-right text-white">
-                {ticket.checkedInAt
-                  ? new Date(ticket.checkedInAt).toLocaleString()
+                {(ticket.checkedInAt ?? ticket.checked_in_at)
+                  ? new Date(
+                      ticket.checkedInAt ?? ticket.checked_in_at
+                    ).toLocaleString()
                   : "Just now"}
               </dd>
             </div>
@@ -169,13 +217,10 @@ export default function OrganizerCheckIn() {
 
           <button
             type="button"
-            onClick={() => {
-              setResult(null);
-              setError("");
-            }}
+            onClick={scanNextTicket}
             className="mt-4 w-full rounded-lg border border-emerald-800 px-4 py-3 font-semibold text-emerald-200 hover:bg-emerald-900/30"
           >
-            Scan next ticket
+            Scan Next Ticket
           </button>
         </div>
       )}

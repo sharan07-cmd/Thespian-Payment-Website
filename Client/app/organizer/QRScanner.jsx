@@ -1,11 +1,17 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-export default function QRScanner({ onScan, disabled = false }) {
+export default function QRScanner({
+  onScan,
+  disabled = false,
+  restartKey = 0,
+}) {
   const scannerRef = useRef(null);
   const onScanRef = useRef(onScan);
+  const handledRef = useRef(false);
+
   const [active, setActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [starting, setStarting] = useState(false);
@@ -14,16 +20,48 @@ export default function QRScanner({ onScan, disabled = false }) {
     onScanRef.current = onScan;
   }, [onScan]);
 
+  // Let the parent request a fresh scan without reloading the page.
+  useEffect(() => {
+    if (restartKey > 0) {
+      handledRef.current = false;
+      setCameraError("");
+      setActive(true);
+    }
+  }, [restartKey]);
+
+  const stopScanner = useCallback(async (scanner) => {
+    if (!scanner) return;
+
+    try {
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
+    } catch {
+      // The camera may already have stopped.
+    }
+
+    try {
+      scanner.clear();
+    } catch {
+      // The reader may already have been cleared.
+    }
+
+    if (scannerRef.current === scanner) {
+      scannerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!active || disabled) return;
 
     let cancelled = false;
     let scanner = null;
-    let handled = false;
+    let startPromise = null;
 
     async function startScanner() {
       setStarting(true);
       setCameraError("");
+      handledRef.current = false;
 
       try {
         const { Html5Qrcode } = await import("html5-qrcode");
@@ -33,40 +71,49 @@ export default function QRScanner({ onScan, disabled = false }) {
         scanner = new Html5Qrcode("organizer-qr-reader");
         scannerRef.current = scanner;
 
-        await scanner.start(
+        startPromise = scanner.start(
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 240, height: 240 },
+            qrbox: { width: 220, height: 220 },
             aspectRatio: 1,
           },
-          async (decodedText) => {
-            if (handled || cancelled) return;
-            handled = true;
+          (decodedText) => {
+            if (cancelled || handledRef.current) return;
 
-            try {
-              await scanner.stop();
-            } catch {}
+            // Lock immediately, before React state or network requests.
+            handledRef.current = true;
+            setActive(false);
 
-            if (!cancelled) {
-              setActive(false);
-              onScanRef.current(decodedText);
-            }
+            // The effect cleanup stops the camera.
+            onScanRef.current(decodedText);
           },
           () => {
-            // Ignore frames that do not contain a readable QR code.
+            // Ignore frames without a readable QR code.
           }
         );
+
+        await startPromise;
+
+        if (cancelled) {
+          await stopScanner(scanner);
+        }
       } catch (error) {
         if (!cancelled) {
           setCameraError(
             error?.message ||
-              "Unable to start the camera. Check camera permissions."
+              "Unable to start the camera. Check browser camera permissions."
           );
           setActive(false);
         }
+
+        if (scanner) {
+          await stopScanner(scanner);
+        }
       } finally {
-        if (!cancelled) setStarting(false);
+        if (!cancelled) {
+          setStarting(false);
+        }
       }
     }
 
@@ -75,17 +122,33 @@ export default function QRScanner({ onScan, disabled = false }) {
     return () => {
       cancelled = true;
 
-      const current = scannerRef.current;
-      scannerRef.current = null;
+      const current = scanner;
 
       if (current) {
-        current
-          .stop()
-          .catch(() => {})
-          .finally(() => current.clear().catch(() => {}));
+        // Wait for startup to finish before stopping or clearing the reader.
+        void (async () => {
+          try {
+            if (startPromise) await startPromise;
+          } catch {
+            // Startup may have failed or been interrupted.
+          }
+
+          await stopScanner(current);
+        })();
       }
     };
-  }, [active, disabled]);
+  }, [active, disabled, stopScanner]);
+
+  function toggleScanner() {
+    setCameraError("");
+
+    if (active) {
+      setActive(false);
+    } else {
+      handledRef.current = false;
+      setActive(true);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -111,10 +174,7 @@ export default function QRScanner({ onScan, disabled = false }) {
       <button
         type="button"
         disabled={disabled || starting}
-        onClick={() => {
-          setCameraError("");
-          setActive((value) => !value);
-        }}
+        onClick={toggleScanner}
         className="w-full rounded-lg border border-[#d6b66b] px-4 py-3 font-semibold text-[#e6cc8c] transition hover:bg-[#d6b66b]/10 disabled:opacity-50"
       >
         {starting
@@ -125,8 +185,8 @@ export default function QRScanner({ onScan, disabled = false }) {
       </button>
 
       <p className="text-xs leading-5 text-stone-500">
-        Camera access is requested by your browser. You can also use manual
-        token entry if the camera is unavailable.
+        Allow camera access in your browser. If scanning is unavailable,
+        enter the ticket token manually.
       </p>
     </div>
   );
