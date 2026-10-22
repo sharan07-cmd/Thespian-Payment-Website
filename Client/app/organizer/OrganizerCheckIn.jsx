@@ -24,12 +24,12 @@ function extractToken(value) {
 
 export default function OrganizerCheckIn() {
   const [manualToken, setManualToken] = useState("");
+  const [action, setAction] = useState("check-in");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [scanSession, setScanSession] = useState(0);
 
-  // Unlike React state, this lock changes immediately.
   const requestInProgress = useRef(false);
 
   const verifyToken = useCallback(async (rawValue) => {
@@ -52,7 +52,7 @@ export default function OrganizerCheckIn() {
       const response = await fetch("/api/organizer/check-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, action }),
       });
 
       let data;
@@ -63,13 +63,8 @@ export default function OrganizerCheckIn() {
         throw new Error("The server returned an unreadable response.");
       }
 
-      if (!response.ok) {
-        setError(data?.error || "Ticket verification failed.");
-        return;
-      }
-
-      if (!data?.success) {
-        setError(data?.error || "The server did not confirm this check-in.");
+      if (!response.ok || !data?.success) {
+        setError(data?.error || "Ticket movement failed.");
         return;
       }
 
@@ -78,16 +73,16 @@ export default function OrganizerCheckIn() {
     } catch (err) {
       setError(
         err?.message === "Failed to fetch"
-          ? "Connection interrupted. Check your network and verify the ticket status before retrying."
-          : err?.message || "Unable to reach the server. Please try again."
+          ? "Connection interrupted. Check the network and verify the ticket status before retrying."
+          : err?.message || "Unable to reach the server."
       );
     } finally {
       requestInProgress.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [action]);
 
-  const ticket = result?.ticket ?? result;
+  const ticket = result?.ticket;
 
   function scanNextTicket() {
     setResult(null);
@@ -96,24 +91,78 @@ export default function OrganizerCheckIn() {
     setScanSession((value) => value + 1);
   }
 
+  function changeAction(nextAction) {
+    if (loading) return;
+
+    setAction(nextAction);
+    setResult(null);
+    setError("");
+    setScanSession((value) => value + 1);
+  }
+
+  const isCheckIn = result?.action === "check-in";
+
   return (
     <section className="rounded-2xl border border-[#574629] bg-[#171612] p-5 sm:p-7">
-      <div className="mb-6 flex items-start gap-3">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#d6b66b]/10 text-2xl text-[#d6b66b]">
-          ▦
+      <div className="mb-6">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#d6b66b]">
+          Entry management
+        </p>
+        <h2 className="mt-1 text-xl font-semibold text-white">
+          Ticket verification
+        </h2>
+        <p className="mt-1 text-sm text-stone-400">
+          Scan the same ticket at entry, during interval exit, and re-entry.
+        </p>
+      </div>
+
+      <div className="mb-5">
+        <p className="mb-2 text-sm font-semibold text-stone-200">
+          Select scanning mode
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => changeAction("check-in")}
+            aria-pressed={action === "check-in"}
+            className={`rounded-xl border px-3 py-4 text-sm font-bold transition ${
+              action === "check-in"
+                ? "border-emerald-500 bg-emerald-950/50 text-emerald-200"
+                : "border-stone-700 text-stone-400 hover:border-stone-500"
+            } disabled:opacity-50`}
+          >
+            ✓ CHECK-IN
+            <span className="mt-1 block text-xs font-normal">
+              Admit attendee
+            </span>
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => changeAction("check-out")}
+            aria-pressed={action === "check-out"}
+            className={`rounded-xl border px-3 py-4 text-sm font-bold transition ${
+              action === "check-out"
+                ? "border-amber-500 bg-amber-950/40 text-amber-200"
+                : "border-stone-700 text-stone-400 hover:border-stone-500"
+            } disabled:opacity-50`}
+          >
+            ↗ CHECK-OUT
+            <span className="mt-1 block text-xs font-normal">
+              Record exit
+            </span>
+          </button>
         </div>
 
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#d6b66b]">
-            Entry management
-          </p>
-          <h2 className="mt-1 text-xl font-semibold text-white">
-            Ticket verification
-          </h2>
-          <p className="mt-1 text-sm text-stone-400">
-            Scan a ticket and verify it before admitting the attendee.
-          </p>
-        </div>
+        <p className="mt-3 text-xs text-stone-400">
+          Current mode:{" "}
+          <span className="font-bold text-[#d6b66b]">
+            {action === "check-in" ? "CHECK-IN" : "CHECK-OUT"}
+          </span>
+        </p>
       </div>
 
       <QRScanner
@@ -124,7 +173,7 @@ export default function OrganizerCheckIn() {
 
       {loading && (
         <div role="status" className="mt-4 rounded-lg bg-stone-900 p-4 text-sm text-stone-200">
-          Verifying ticket securely…
+          Verifying ticket and recording movement…
         </div>
       )}
 
@@ -164,7 +213,7 @@ export default function OrganizerCheckIn() {
           role="alert"
           className="mt-5 rounded-xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-200"
         >
-          <p className="font-bold">Verification unsuccessful</p>
+          <p className="font-bold">Movement unsuccessful</p>
           <p className="mt-1">{error}</p>
 
           {error.toLowerCase().includes("log in") && (
@@ -178,38 +227,51 @@ export default function OrganizerCheckIn() {
       {result?.success && ticket && (
         <div
           role="status"
-          className="mt-5 rounded-xl border border-emerald-800 bg-emerald-950/30 p-5"
+          className={`mt-5 rounded-xl border p-5 ${
+            isCheckIn
+              ? "border-emerald-800 bg-emerald-950/30"
+              : "border-amber-800 bg-amber-950/30"
+          }`}
         >
-          <p className="font-bold text-emerald-300">
-            ✓ Check-in successful
+          <p
+            className={`font-bold ${
+              isCheckIn ? "text-emerald-300" : "text-amber-200"
+            }`}
+          >
+            {isCheckIn ? "✓ CHECK-IN SUCCESSFUL" : "✓ CHECK-OUT SUCCESSFUL"}
           </p>
 
-          <p className="mt-1 text-sm text-emerald-100/80">
-            {result.message || "Ticket verified successfully."}
+          <p className="mt-1 text-sm text-stone-200">
+            {result.message}
           </p>
 
-          <dl className="mt-4 divide-y divide-emerald-900/70 text-sm">
+          <dl className="mt-4 divide-y divide-stone-800 text-sm">
             <div className="flex justify-between gap-4 py-3">
               <dt className="text-stone-400">Ticket code</dt>
               <dd className="break-all text-right font-semibold text-white">
-                {ticket.ticketCode ?? ticket.ticket_code ?? "N/A"}
+                {ticket.ticketCode ?? "N/A"}
               </dd>
             </div>
 
             <div className="flex justify-between gap-4 py-3">
               <dt className="text-stone-400">Seat</dt>
               <dd className="text-right font-semibold text-white">
-                {ticket.seatId ?? ticket.seat_id ?? "N/A"}
+                {ticket.seatId ?? "N/A"}
               </dd>
             </div>
 
             <div className="flex justify-between gap-4 py-3">
-              <dt className="text-stone-400">Checked in at</dt>
+              <dt className="text-stone-400">Current status</dt>
+              <dd className="text-right font-bold text-[#d6b66b]">
+                {ticket.entryStatus ?? result.entryStatus ?? "N/A"}
+              </dd>
+            </div>
+
+            <div className="flex justify-between gap-4 py-3">
+              <dt className="text-stone-400">Movement time</dt>
               <dd className="text-right text-white">
-                {(ticket.checkedInAt ?? ticket.checked_in_at)
-                  ? new Date(
-                      ticket.checkedInAt ?? ticket.checked_in_at
-                    ).toLocaleString()
+                {ticket.movementAt
+                  ? new Date(ticket.movementAt).toLocaleString()
                   : "Just now"}
               </dd>
             </div>
@@ -218,7 +280,7 @@ export default function OrganizerCheckIn() {
           <button
             type="button"
             onClick={scanNextTicket}
-            className="mt-4 w-full rounded-lg border border-emerald-800 px-4 py-3 font-semibold text-emerald-200 hover:bg-emerald-900/30"
+            className="mt-4 w-full rounded-lg border border-stone-700 px-4 py-3 font-semibold text-white hover:bg-stone-900"
           >
             Scan Next Ticket
           </button>
