@@ -5,7 +5,7 @@ export default function Home() {
     <main>
       <SeatMap
         showTitle="Ponniyin Selvan: Karikala Yugam"
-        showSubtitle="Sat 31 Oct 2026, 6:00 PM · EEE Auditorium"
+        showSubtitle="Wed 28 Oct 2026, 6:00 PM · EEE Auditorium"
       />
     </main>
   );
