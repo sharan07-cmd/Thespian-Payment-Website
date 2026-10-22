@@ -49,6 +49,7 @@ export async function POST(request) {
       typeof body.token === "string" ? body.token.trim() : "";
 
     const action = body.action;
+    const showId = body.showId;
 
     if (!["show-1", "show-2"].includes(showId)) {
       return NextResponse.json(
