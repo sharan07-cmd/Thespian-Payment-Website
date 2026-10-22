@@ -22,7 +22,7 @@ function extractToken(value) {
   return text;
 }
 
-export default function OrganizerCheckIn() {
+export default function OrganizerCheckIn({showId}) {
   const [manualToken, setManualToken] = useState("");
   const [action, setAction] = useState("check-in");
   const [loading, setLoading] = useState(false);
@@ -52,7 +52,7 @@ export default function OrganizerCheckIn() {
       const response = await fetch("/api/organizer/check-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, action }),
+        body: JSON.stringify({ token, action, showId }),
       });
 
       let data;
@@ -111,6 +111,18 @@ export default function OrganizerCheckIn() {
         <h2 className="mt-1 text-xl font-semibold text-white">
           Ticket verification
         </h2>
+
+        <p className="mt-1 text-sm text-stone-400">
+          Selected show:{" "}
+          <span className="font-semibold text-[#d6b66b]">
+            {showId === "show-1"
+              ? "Wednesday, 28 October 2026 — 6:00 PM"
+              : showId === "show-2"
+                ? "Thursday, 29 October 2026 — 6:00 PM"
+                : "Unknown show"}
+          </span>
+        </p>
+        
         <p className="mt-1 text-sm text-stone-400">
           Scan the same ticket at entry, during interval exit, and re-entry.
         </p>

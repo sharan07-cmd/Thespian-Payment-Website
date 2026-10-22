@@ -59,7 +59,7 @@ function StatCard({ label, value, detail, accent }) {
   );
 }
 
-export default function OrganizerDashboard() {
+export default function OrganizerDashboard({showId}) {
   const [stats, setStats] = useState(initialStats);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,7 @@ export default function OrganizerDashboard() {
     if (manual) setRefreshing(true);
 
     try {
-      const response = await fetch("/api/organizer/dashboard", {
+      const response = await fetch(`/api/organizer/dashboard?showId=${encodeURIComponent(showId)}`, {
         method: "GET",
         cache: "no-store",
         credentials: "same-origin",
@@ -99,7 +99,7 @@ export default function OrganizerDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [showId]);
 
   useEffect(() => {
     loadDashboard();

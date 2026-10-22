@@ -32,7 +32,7 @@ export async function POST(request) {
 
     const { data: booking, error } = await supabaseAdmin
       .from("bookings")
-      .select("id, quantity, amount_paise, status, razorpay_order_id")
+      .select("id, show_id, quantity, amount_paise, status, razorpay_order_id")
       .eq("id", bookingId)
       .maybeSingle();
 
@@ -51,6 +51,34 @@ export async function POST(request) {
       );
     }
 
+    if (!booking.show_id) {
+  return NextResponse.json(
+    { success: false, message: "This booking has no associated show." },
+    { status: 409 }
+  );
+}
+
+    const { data: show, error: showError } = await supabaseAdmin
+      .from("shows")
+      .select("id, ticket_price_paise, active")
+      .eq("id", booking.show_id)
+      .maybeSingle();
+
+    if (showError) {
+      console.error("Show lookup error:", showError.message);
+      return NextResponse.json(
+        { success: false, message: "Could not verify the selected show." },
+        { status: 500 }
+      );
+    }
+
+    if (!show || !show.active) {
+      return NextResponse.json(
+        { success: false, message: "This show is unavailable for booking." },
+        { status: 409 }
+      );
+    }
+
     if (booking.status !== "pending") {
       return NextResponse.json(
         { success: false, message: "This booking is not payable." },
@@ -60,8 +88,9 @@ export async function POST(request) {
 
     const { data: claims, error: claimsError } = await supabaseAdmin
       .from("seat_claims")
-      .select("seat_id, status, expires_at")
-      .eq("booking_id", bookingId);
+      .select("seat_id, status, expires_at, show_id")
+      .eq("booking_id", bookingId)
+      .eq("show_id", booking.show_id);
 
     if (claimsError) {
       console.error("Seat claim lookup error:", claimsError.message);
@@ -82,7 +111,7 @@ export async function POST(request) {
       !Number.isInteger(booking.quantity) ||
       booking.quantity < 1 ||
       booking.quantity > 5 ||
-      booking.amount_paise !== booking.quantity * 5000
+      booking.amount_paise !== booking.quantity * show.ticket_price_paise
     ) {
       return NextResponse.json(
         {

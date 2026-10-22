@@ -50,6 +50,16 @@ export async function POST(request) {
 
     const action = body.action;
 
+    if (!["show-1", "show-2"].includes(showId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Select a valid show before scanning tickets.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (
       !token ||
       token.length > 100 ||
@@ -68,6 +78,39 @@ export async function POST(request) {
       );
     }
 
+    // Verify that the ticket belongs to the selected show.
+    const {
+      data: matchingTicket,
+      error: ticketLookupError,
+    } = await supabaseAdmin
+      .from("tickets")
+      .select("id, show_id")
+      .eq("barcode_token", token)
+      .eq("show_id", showId)
+      .maybeSingle();
+
+    if (ticketLookupError) {
+      console.error("Ticket show lookup failed:", ticketLookupError);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Could not verify which show this ticket belongs to.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!matchingTicket) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This ticket does not belong to the selected show, or the ticket was not found.",
+        },
+        { status: 409 }
+      );
+    }
+
     // 4. Process the movement in one database transaction.
     // The PostgreSQL function validates the ticket, payment,
     // staff permissions, and current entry status.
@@ -76,6 +119,7 @@ export async function POST(request) {
         p_token: token,
         p_staff_id: user.id,
         p_action: action,
+        p_show_id: showId,
       });
 
     if (movementError) {

@@ -56,7 +56,7 @@ export async function POST(request) {
       await supabaseAdmin
         .from("bookings")
         .select(
-          "id, quantity, amount_paise, status, razorpay_order_id, razorpay_payment_id"
+          "id, show_id, quantity, amount_paise, status, razorpay_order_id, razorpay_payment_id"
         )
         .eq("id", bookingId)
         .maybeSingle();
@@ -82,6 +82,17 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    if (!booking.show_id) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This booking has no associated show.",
+        },
+        { status: 409 }
+      );
+    }
+
 
     // 2. Verify Razorpay's checkout signature.
     const expectedSignature = createHmac("sha256", keySecret)
@@ -171,9 +182,10 @@ export async function POST(request) {
       await supabaseAdmin
         .from("tickets")
         .select(
-          "id, booking_id, ticket_code, seat_id, created_at, barcode_token"
+          "id, booking_id, ticket_code, seat_id, created_at, barcode_token, show_id"
         )
         .eq("booking_id", bookingId)
+        .eq("show_id", booking.show_id)
         .order("seat_id", { ascending: true });
 
     if (ticketError) {

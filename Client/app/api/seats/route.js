@@ -1,21 +1,37 @@
+
 import Razorpay from "razorpay";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
-// Handles loading the seat map
-export async function GET() {
+const isValidShowId = (showId) =>
+  typeof showId === "string" &&
+  ["show-1", "show-2"].includes(showId);
+
+// Handles loading seat availability for a specific show.
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const showId = searchParams.get("showId");
+
+    if (!isValidShowId(showId)) {
+      return NextResponse.json(
+        { error: "A valid showId is required." },
+        { status: 400 }
+      );
+    }
+
     const { data, error } = await supabaseAdmin
       .from("seat_claims")
-      .select("seat_id, status, expires_at");
+      .select("seat_id, status, expires_at")
+      .eq("show_id", showId);
 
     if (error) {
       console.error("Seat availability error:", error.message);
 
       return NextResponse.json(
-        { error: "Could not load seat availability" },
+        { error: "Could not load seat availability." },
         { status: 500 }
       );
     }
@@ -39,19 +55,27 @@ export async function GET() {
     console.error("Seat API error:", error);
 
     return NextResponse.json(
-      { error: "Could not load seat availability" },
+      { error: "Could not load seat availability." },
       { status: 500 }
     );
   }
 }
 
-// Handles reserving seats
+// Handles reserving seats for a specific show.
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { seats, quantity, name, email, phone } = body;
+    const { showId, seats, quantity, name, email, phone } = body;
+
+    if (!isValidShowId(showId)) {
+      return NextResponse.json(
+        { success: false, message: "A valid showId is required." },
+        { status: 400 }
+      );
+    }
 
     const { data, error } = await supabaseAdmin.rpc("reserve_seats", {
+      p_show_id: showId,
       p_seat_ids: seats,
       p_quantity: quantity,
       p_customer_name: name,
@@ -62,47 +86,42 @@ export async function POST(request) {
     if (error) {
       console.error("Seat reservation error:", error.message);
 
+      const isUnavailable = error.message?.includes("SEAT_UNAVAILABLE");
+
       return NextResponse.json(
-        { success: false, message: error.message },
-        { status: 400 }
+        {
+          success: false,
+          message: isUnavailable
+            ? "One or more selected seats are no longer available. Please refresh and try again."
+            : error.message,
+        },
+        { status: isUnavailable ? 409 : 400 }
       );
     }
 
-    // Supabase RPC may return an array of rows or a single object.
     const reservation = Array.isArray(data) ? data[0] : data;
-
-    // Diagnostic logs: inspect the actual response in your terminal.
-    console.log(
-      "Supabase reservation data:",
-      JSON.stringify(data, null, 2)
-    );
-    console.log(
-      "Reservation object:",
-      JSON.stringify(reservation, null, 2)
-    );
 
     if (
       !reservation?.booking_id ||
       !reservation?.release_token ||
       !reservation?.expires_at
     ) {
-      console.error("Reservation response is missing required fields.");
+      console.error("Incomplete reservation response:", data);
 
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Reservation details were incomplete. Please try again.",
+          message: "Reservation details were incomplete. Please try again.",
         },
         { status: 500 }
       );
     }
 
-    // Return the reservation in the format expected by the checkout.
     return NextResponse.json({
       success: true,
       reservation: {
         ...reservation,
+        show_id: showId,
         total_paise: Number(reservation.total_paise),
       },
     });
@@ -116,7 +135,7 @@ export async function POST(request) {
   }
 }
 
-
+// Releases an abandoned reservation after verifying its payment state.
 export async function DELETE(request) {
   try {
     const { bookingId, releaseToken } = await request.json();
@@ -139,15 +158,11 @@ export async function DELETE(request) {
       );
     }
 
-    // Retrieve the booking and verify the release token.
-    const { data: booking, error: bookingError } =
-      await supabaseAdmin
-        .from("bookings")
-        .select(
-          "id, status, release_token, razorpay_order_id"
-        )
-        .eq("id", bookingId)
-        .maybeSingle();
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from("bookings")
+      .select("id, status, release_token, razorpay_order_id")
+      .eq("id", bookingId)
+      .maybeSingle();
 
     if (bookingError) {
       console.error("Booking lookup error:", bookingError.message);
@@ -158,10 +173,7 @@ export async function DELETE(request) {
       );
     }
 
-    if (
-      !booking ||
-      booking.release_token !== releaseToken
-    ) {
+    if (!booking || booking.release_token !== releaseToken) {
       return NextResponse.json(
         { success: false, message: "Invalid booking or release token." },
         { status: 403 }
@@ -176,9 +188,7 @@ export async function DELETE(request) {
       });
     }
 
-    // Do not release seats if a Razorpay order exists.
-    // Payment status must be verified before releasing them.
-    
+    // Never release a reservation while payment may be in progress.
     if (booking.razorpay_order_id) {
       const keyId = process.env.RAZORPAY_KEY_ID;
       const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -206,13 +216,8 @@ export async function DELETE(request) {
 
         const payments = paymentsResponse.items ?? [];
 
-        // Never release if the order is paid or payment
-        // is created, authorized, or captured.
-        const paymentInProgressOrSuccessful = payments.some(
-          (payment) =>
-            ["created", "authorized", "captured"].includes(
-              payment.status
-            )
+        const paymentInProgressOrSuccessful = payments.some((payment) =>
+          ["created", "authorized", "captured"].includes(payment.status)
         );
 
         if (
@@ -240,7 +245,6 @@ export async function DELETE(request) {
         );
       }
     }
-
 
     const { data, error } = await supabaseAdmin.rpc(
       "release_abandoned_booking",

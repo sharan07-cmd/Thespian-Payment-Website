@@ -3,8 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import LogoutButton from "./LogoutButton";
-import OrganizerCheckIn from "./OrganizerCheckIn";
-import OrganizerDashboard from "./OrganizerDashboard";
+import OrganizerShowPanel from "./OrganizerShowPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -119,22 +118,7 @@ export default async function OrganizerDashboardPage() {
           </div>
         </section>
 
-        {/* New live statistics and recent movement activity */}
-        <OrganizerDashboard />
-
-        {/* Existing camera-based QR scanner and entry controls */}
-        <section>
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold">
-              Ticket verification
-            </h3>
-            <p className="mt-1 text-sm text-stone-500">
-              Scan a ticket QR code to check attendees in or out.
-            </p>
-          </div>
-
-          <OrganizerCheckIn />
-        </section>
+        <OrganizerShowPanel />
 
         <footer className="border-t border-stone-800 pt-5 text-xs text-stone-500">
           THESPIAN TICKETS · Secure event entry management
