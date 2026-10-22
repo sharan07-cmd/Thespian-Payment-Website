@@ -1,70 +1,68 @@
-// Generates the fixed theater layout:
-// - Rows 1-24 (labeled A-X): 12 seats each, split into two blocks of 6
-//   (left: 1-6, right: 7-12) with a center aisle.
-// - Row 25 (labeled Y): 15 seats, no split, straight across.
-//
-// This is a static config for now. Later, this can move into the database
-// (a `seats` table) and be generated once per show instead of per page load.
-
-const ROW_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXY".split(""); // 25 letters
-
-// No seats are pre-booked — real availability will come from the backend
-// once that's wired up. Every seat starts as "available".
-const DEMO_BOOKED = new Set();
+export const SEAT_PRICE = 50;
+const ROW_LABELS = "ABCDEFGHIJKLMNOP".split("");
 
 export function generateSeatLayout() {
   const rows = ROW_LABELS.map((label, index) => {
     const rowNumber = index + 1;
-    const isLastRow = rowNumber === 25;
 
-    if (isLastRow) {
-      const seats = Array.from({ length: 15 }, (_, i) => {
-        const seatNumber = i + 1;
-        const id = `${label}-${seatNumber}`;
-        return {
-          id,
-          label: `${label}${seatNumber}`,
-          number: seatNumber,
-          block: "single",
-          status: DEMO_BOOKED.has(id) ? "booked" : "available",
-        };
-      });
+    // Row P
+    if (rowNumber === 16) {
+      const seats = Array.from({ length: 17 }, (_, i) => ({
+        id: `${label}-${i + 1}`,
+        label: `${label}${i + 1}`,
+        number: i + 1,
+        block: "single",
+        status: "available",
+      }));
       return { rowLabel: label, rowNumber, split: false, blocks: [seats] };
     }
 
-    const left = Array.from({ length: 6 }, (_, i) => {
-      const seatNumber = i + 1;
-      const id = `${label}-${seatNumber}`;
-      return {
-        id,
-        label: `${label}${seatNumber}`,
-        number: seatNumber,
-        block: "left",
-        status: DEMO_BOOKED.has(id) ? "booked" : "available",
-      };
-    });
+    // Rows F–K (6-11)
+    const isShortRow = rowNumber >= 6 && rowNumber <= 11;
+    const rightSeatCount = isShortRow ? 5 : 7;
 
-    const right = Array.from({ length: 6 }, (_, i) => {
-      const seatNumber = i + 7;
-      const id = `${label}-${seatNumber}`;
-      return {
-        id,
-        label: `${label}${seatNumber}`,
-        number: seatNumber,
+    const left = Array.from({ length: 7 }, (_, i) => ({
+      id: `${label}-${i + 1}`,
+      label: `${label}${i + 1}`,
+      number: i + 1,
+      block: "left",
+      status: "available",
+    }));
+
+    const rightSeats = Array.from({ length: rightSeatCount }, (_, i) => ({
+      id: `${label}-${8 + i}`,
+      label: `${label}${8 + i}`,
+      number: 8 + i,
+      block: "right",
+      status: "available",
+    }));
+
+    // Pad the right side of rows F-K with 2 empty placeholder objects
+    const rightPlaceholders = Array.from(
+      { length: 7 - rightSeatCount },
+      (_, i) => ({
+        id: `${label}-empty-${i + 1}`,
+        label: "",
+        number: null,
         block: "right",
-        status: DEMO_BOOKED.has(id) ? "booked" : "available",
-      };
-    });
+        status: "empty", 
+      })
+    );
 
-    return { rowLabel: label, rowNumber, split: true, blocks: [left, right] };
+    return {
+      rowLabel: label,
+      rowNumber,
+      split: true,
+      blocks: [left, [...rightSeats, ...rightPlaceholders]],
+    };
   });
 
+  // Calculate total bookable seats (ignores placeholders)
   const totalSeats = rows.reduce(
-    (sum, row) => sum + row.blocks.reduce((s, b) => s + b.length, 0),
-    0
+    (sum, row) => sum + row.blocks.reduce(
+      (rowSum, block) => rowSum + block.filter(s => s.status !== "empty").length, 0
+    ), 0
   );
 
   return { rows, totalSeats };
 }
-
-export const SEAT_PRICE = 50; // in rupees, placeholder — adjust as needed
