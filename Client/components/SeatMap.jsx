@@ -7,7 +7,7 @@ import { generateSeatLayout, SEAT_PRICE } from "@/lib/seatLayout";
 import Checkout from "@/components/Checkout";
 import QRCode from "qrcode";
 
-export default function SeatMap({ showTitle, showSubtitle }) {
+export default function SeatMap({ showId, showTitle, showSubtitle }) {
   const { rows, totalSeats } = useMemo(() => generateSeatLayout(), []);
   const [selected, setSelected] = useState(() => new Set());
   const [unavailableSeats, setUnavailableSeats] = useState(() => new Set());
@@ -33,9 +33,12 @@ export default function SeatMap({ showTitle, showSubtitle }) {
 
   async function fetchAvailability() {
     try {
-      const response = await fetch("/api/seats", {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/seats?showId=${encodeURIComponent(showId)}`,
+        {
+          cache: "no-store",
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Could not fetch seat availability");
@@ -71,7 +74,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
     active = false;
     clearInterval(intervalId);
   };
-}, []);
+}, [showId]);
 
   function toggleSeat(seat) {
     if (
@@ -103,6 +106,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          showId: showId,
           seats: selectedList,
           quantity: selectedList.length,
           name: customer.name,
@@ -134,9 +138,12 @@ export default function SeatMap({ showTitle, showSubtitle }) {
       setMessage(error.message || "Something went wrong.");
 
       try {
-        const response = await fetch("/api/seats", {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/seats?showId=${encodeURIComponent(showId)}`,
+          {
+            cache: "no-store",
+          }
+        );
 
         if (response.ok) {
           const data = await response.json();
@@ -180,6 +187,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
 
     const tickets = confirmedTicket.tickets;
     const eventTitle = confirmedTicket.showTitle || "Event";
+    const eventSubtitle = confirmedTicket.showSubtitle || "";
     const bookingId = confirmedTicket.bookingId || "N/A";
 
     for (const [index, ticket] of tickets.entries()) {
@@ -309,18 +317,33 @@ export default function SeatMap({ showTitle, showSubtitle }) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(...white);
-      doc.text("THEATRE TICKET", centerX, y + 52, {
+      doc.text("THEATRE TICKET", centerX, y + 50, {
         align: "center",
+      });
+
+      // Show date, time and venue
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+
+      const subtitleLines = doc.splitTextToSize(
+        eventSubtitle,
+        contentW - 12
+      ).slice(0, 2);
+
+      doc.text(subtitleLines, centerX, y + 56, {
+        align: "center",
+        lineHeightFactor: 1.2,
       });
 
       // Gold confirmation strip
       doc.setFillColor(202, 160, 52);
-      doc.roundedRect(centerX - 34, y + 58, 68, 9, 1.5, 1.5, "F");
+      doc.roundedRect(centerX - 34, y + 66, 68, 9, 1.5, 1.5, "F");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
       doc.setTextColor(20, 17, 10);
-      doc.text("BOOKING CONFIRMED", centerX, y + 64, {
+      doc.text("BOOKING CONFIRMED", centerX, y + 72, {
         align: "center",
       });
 
@@ -328,12 +351,12 @@ export default function SeatMap({ showTitle, showSubtitle }) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
       doc.setTextColor(...muted);
-      doc.text("RESERVED SEAT", contentX + 5, y + 81);
+      doc.text("RESERVED SEAT", contentX + 5, y + 85);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
       doc.setTextColor(...paleGold);
-      doc.text(seatId, contentX + 5, y + 92);
+      doc.text(seatId, contentX + 5, y + 95);
 
       // Ticket count
       // QR code for organiser verification
@@ -444,6 +467,11 @@ export default function SeatMap({ showTitle, showSubtitle }) {
             </div>
 
             <div className="ticketDetail">
+              <span>Date & Venue</span>
+              <strong>{confirmedTicket.showSubtitle}</strong>
+            </div>
+
+            <div className="ticketDetail">
               <span>Seats</span>
               <strong>{confirmedTicket.seats.join(", ")}</strong>
             </div>
@@ -500,7 +528,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
         <style jsx>{`
           .ticketSuccessPage {
             min-height: 100vh;
-            padding: 24px 16px;
+            padding: 8px 16px 24px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -988,12 +1016,12 @@ export default function SeatMap({ showTitle, showSubtitle }) {
         .wrap {
           max-width: 640px;
           margin: 0 auto;
-          padding: 16px 20px 160px;
+          padding: 4px 20px 160px;
         }
 
         .head {
           text-align: center;
-          margin-bottom: 36px;
+          margin-bottom: 24px;
         }
 
         .eyebrow {
@@ -1019,8 +1047,8 @@ export default function SeatMap({ showTitle, showSubtitle }) {
 
         .stageArea {
           display: flex;
-          justify-content: center;
-          margin-bottom: 40px;
+          justify-content: center;  
+          margin-bottom: 20px;
         }
 
         .stage {
@@ -1053,7 +1081,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
         .map {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 5px;
           width: max-content;
           margin: 0 auto;
         }
@@ -1142,7 +1170,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           display: flex;
           justify-content: center;
           gap: 20px;
-          margin-top: 28px;
+          margin-top: 14px;
           flex-wrap: wrap;
         }
 
@@ -1258,10 +1286,10 @@ export default function SeatMap({ showTitle, showSubtitle }) {
         inset: 0;
         z-index: 1000;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         overflow-y: auto;
-        padding: 24px 16px;
+        padding: 36px 16px 24px;
         background: rgba(8, 4, 6, 0.82);
         backdrop-filter: blur(7px);
       }
