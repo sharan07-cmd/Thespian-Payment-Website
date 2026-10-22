@@ -743,7 +743,6 @@ export default function SeatMap({ showTitle, showSubtitle }) {
   return (
     <div className="wrap">
       <header className="head">
-        <p className="eyebrow">{totalSeats} seats total</p>
         <h1>{showTitle}</h1>
         <p className="subtitle">{showSubtitle}</p>
       </header>
@@ -757,35 +756,58 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           {rows.map((row) => (
             <div className="row" key={row.rowLabel}>
               <span className="rowLabel">{row.rowLabel}</span>
-              <div className="blocks">
+              {/* Note the inline position: relative here */}
+              <div className="blocks" style={{ position: "relative" }}>
+                
+                {/* 1. Conditionally render the arrow for Row H with INLINE styles to fix the layout bug */}
+                {row.rowLabel === "H" && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                      color: "rgba(201, 162, 39, 0.25)",
+                      pointerEvents: "none",
+                      zIndex: 0,
+                    }}
+                  >
+                    <svg aria-hidden="true" width="24" height="140" viewBox="0 0 24 140" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 140V4" />
+                      <path d="M5 11l7-7 7 7" />
+                    </svg>
+                  </div>
+                )}
+
+                {/* 2. Map through the seat blocks normally */}
                 {row.blocks.map((block, bi) => (
                   <div className="block" key={bi}>
-                    {block.map((seat) => (
-                      <button
-                        key={seat.id}
-                        type="button"
-                        className={`seat ${
-                          unavailableSeats.has(seat.id) || seat.status === "booked"
-                            ? "booked"
-                            : seat.status
-                        } ${selected.has(seat.id) ? "selected" : ""}`}
-                        disabled={
-                          showForm ||
-                          showCheckout ||
-                          seat.status === "booked" ||
-                          unavailableSeats.has(seat.id)
-                        }
-                        onClick={() => toggleSeat(seat)}
-                        aria-label={`Seat ${seat.label},${
-                          unavailableSeats.has(seat.id) || seat.status === "booked"
-                            ? "unavailable"
-                            : selected.has(seat.id)
-                              ? "selected"
+                    {block.map((seat) => {
+                      if (seat.status === "empty") {
+                        return <div key={seat.id} className="seat empty" />;
+                      }
+
+                      return (
+                        <button
+                          key={seat.id}
+                          type="button"
+                          className={`seat ${
+                            unavailableSeats.has(seat.id) || seat.status === "booked"
+                              ? "booked"
                               : seat.status
-                        }`}
-                        title={seat.label}
-                      />
-                    ))}
+                          } ${selected.has(seat.id) ? "selected" : ""}`}
+                          disabled={
+                            showForm ||
+                            showCheckout ||
+                            seat.status === "booked" ||
+                            unavailableSeats.has(seat.id)
+                          }
+                          onClick={() => toggleSeat(seat)}
+                          aria-label={`Seat ${seat.label}`}
+                          title={seat.label}
+                        />
+                      );
+                    })}
                   </div>
                 ))}
               </div>
@@ -966,7 +988,7 @@ export default function SeatMap({ showTitle, showSubtitle }) {
         .wrap {
           max-width: 640px;
           margin: 0 auto;
-          padding: 48px 20px 160px;
+          padding: 16px 20px 160px;
         }
 
         .head {
@@ -1057,7 +1079,24 @@ export default function SeatMap({ showTitle, showSubtitle }) {
 
         .blocks {
           display: flex;
-          gap: 22px;
+          gap: clamp(24px, 6vw, 54px);
+          position: relative;
+        }
+
+        .aisleIndicator {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          color: rgba(201, 162, 39, 0.25); /* Muted gold so it doesn't distract from seats */
+          pointer-events: none; /* CRITICAL: ensures clicking the arrow doesn't block seat clicks */
+          z-index: 0;
+          animation: driftUp 3s infinite ease-in-out;
+        }
+
+        @keyframes driftUp {
+          0%, 100% { transform: translate(-50%, -50%); }
+          50% { transform: translate(-50%, -58%); }
         }
 
         .block {
@@ -1074,6 +1113,13 @@ export default function SeatMap({ showTitle, showSubtitle }) {
           padding: 0;
           cursor: pointer;
           transition: transform 0.12s ease, background 0.12s ease;
+        }
+
+        .seat.empty {
+          visibility: hidden;
+          pointer-events: none;
+          border: none;
+          background: transparent;
         }
 
         .seat:hover:not(:disabled) {
