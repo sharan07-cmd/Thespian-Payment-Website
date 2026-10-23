@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -93,87 +92,21 @@ export default function Home() {
 
         {/* Mobile-only front page */}
         <div className={styles.mobileLanding}>
-          <header className={styles.mobileHeader}>
-            <span className={styles.mobileLogo} aria-hidden="true">
-              ♜
-            </span>
-            <span className={styles.mobileBrand}>
-              THESPIANS’
-              <br />
-              SOCIETY
-            </span>
-          </header>
-
-          <div className={styles.mobileArtwork}>
+          <div className={styles.mobilePoster}>
             <Image
-              src="/images/karikala-mobile.jpg"
-              alt="Karikala Chola standing proudly against a golden sunset"
+              src="/images/mobile-front-cover.png"
+              alt="Ponniyin Selvan: Karikala Yugam mobile poster"
               fill
               priority
               sizes="100vw"
-              className={styles.mobileArtworkImage}
+              className={styles.mobilePosterImage}
             />
-          </div>
-
-          <div className={styles.mobileContent}>
-            <p className={styles.mobileEyebrow}>
-              ✦ &nbsp; A LEGEND RETURNS TO THE STAGE &nbsp; ✦
-            </p>
-
-            <h1 className={styles.mobileTitle}>
-              PONNIYIN SELVAN
-              <span>KARIKALA YUGAM</span>
-            </h1>
-
-            <p className={styles.mobileTagline}>
-              AN EMPIRE. A LEGACY.
-              <br />
-              AN EPIC BROUGHT TO LIFE.
-            </p>
-
-            <div className={styles.mobileDetails}>
-              <div className={styles.mobileDetail}>
-                <span className={styles.mobileDetailIcon} aria-hidden="true">
-                  ▦
-                </span>
-                <div>
-                  <strong>28 &amp; 29 OCTOBER 2026</strong>
-                  <span>PERFORMANCE DATES</span>
-                </div>
-              </div>
-
-              <div className={styles.mobileDetail}>
-                <span className={styles.mobileDetailIcon} aria-hidden="true">
-                  ◷
-                </span>
-                <div>
-                  <strong>6:00 PM</strong>
-                  <span>CURTAIN RISES</span>
-                </div>
-              </div>
-
-              <div className={styles.mobileDetail}>
-                <span className={styles.mobileDetailIcon} aria-hidden="true">
-                  ♧
-                </span>
-                <div>
-                  <strong>EEE AUDITORIUM</strong>
-                  <span>THE VENUE</span>
-                </div>
-              </div>
-            </div>
-
             <button
               type="button"
-              className={styles.mobileBookButton}
+              className={styles.mobilePosterBookButton}
+              aria-label="Book your seats"
               onClick={() => setShowPicker(true)}
-            >
-              BOOK YOUR SEATS <span aria-hidden="true">→</span>
-            </button>
-
-            <p className={styles.mobileFootnote}>
-              CHOOSE YOUR SHOW · EXPERIENCE THE EPIC
-            </p>
+            />
           </div>
         </div>
       </section>
@@ -193,8 +126,6 @@ export default function Home() {
           </article>
         ))}
       </section>
-
-
 
       {/* Existing show-selection popup */}
       {showPicker && (
