@@ -114,11 +114,108 @@ export async function POST(request) {
       );
     }
 
-    // 3. Verify the payment directly with Razorpay.
+
+    // 3. Verify the total against the dynamically priced seats.
+    const { data: claims, error: claimsError } = await supabaseAdmin
+      .from("seat_claims")
+      .select("seat_id, status, expires_at")
+      .eq("booking_id", bookingId);
+
+    if (claimsError) {
+      console.error("Seat claim lookup error:", claimsError.message);
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Could not verify the reserved seats.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const now = Date.now();
+
+    const activeClaims = (claims ?? []).filter(
+      (claim) =>
+        claim.status === "booked" ||
+        (claim.status === "reserved" &&
+          claim.expires_at &&
+          new Date(claim.expires_at).getTime() > now)
+    );
+
+    const uniqueSeatIds = new Set(
+      activeClaims.map((claim) => claim.seat_id)
+    );
+
+    function getSeatPricePaise(seatId) {
+      const match = /^([A-P])-(\d{1,2})$/.exec(seatId ?? "");
+
+      if (!match) return null;
+
+      const row = match[1];
+      const seatNumber = Number(match[2]);
+
+      if (["A", "B", "C", "D", "E", "L", "M", "N", "O"].includes(row)) {
+        if (seatNumber < 1 || seatNumber > 14) return null;
+      } else if (["F", "G", "H", "I", "J", "K"].includes(row)) {
+        if (seatNumber < 1 || seatNumber > 12) return null;
+      } else if (row === "P") {
+        if (seatNumber < 1 || seatNumber > 17) return null;
+      } else {
+        return null;
+      }
+
+      if (["A", "B", "C", "D", "E"].includes(row)) return 7500;
+      if (["F", "G", "H", "I", "J", "K"].includes(row)) return 5000;
+
+      return 4000;
+    }
+
+    const seatPrices = activeClaims.map((claim) =>
+      getSeatPricePaise(claim.seat_id)
+    );
+
+    if (
+      activeClaims.length !== booking.quantity ||
+      uniqueSeatIds.size !== booking.quantity ||
+      seatPrices.some((price) => price === null)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "The reserved seats could not be validated.",
+        },
+        { status: 409 }
+      );
+    }
+
+    const expectedTotalPaise = seatPrices.reduce(
+      (total, price) => total + price,
+      0
+    );
+
+    if (Number(booking.amount_paise) !== expectedTotalPaise) {
+      console.error("Booking amount mismatch:", {
+        bookingId,
+        storedAmount: booking.amount_paise,
+        expectedTotalPaise,
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "The booking amount does not match the reserved seats.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // 4. Verify the payment directly with Razorpay.
     const razorpay = new Razorpay({
       key_id: keyId,
       key_secret: keySecret,
     });
+
 
     const payment = await razorpay.payments.fetch(paymentId);
 
