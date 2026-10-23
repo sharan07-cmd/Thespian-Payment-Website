@@ -1,20 +1,8 @@
-/*import SeatMap from "@/components/SeatMap";
-
-export default function Home() {
-  return (
-    <main>
-      <SeatMap
-        showTitle="Ponniyin Selvan: Karikala Yugam"
-        showSubtitle="Wed 28 Oct 2026, 6:00 PM · EEE Auditorium"
-      />
-    </main>
-  );
-}*/
-
 
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import SeatMap from "@/components/SeatMap";
 import styles from "./page.module.css";
 
@@ -33,14 +21,36 @@ const SHOWS = [
   },
 ];
 
+const FEATURES = [
+  {
+    icon: "♜",
+    title: "TIMELESS STORY",
+    description: "A tale of courage, power and an empire.",
+  },
+  {
+    icon: "⚜",
+    title: "LIVE PERFORMANCE",
+    description: "Feel every emotion. Witness history unfold on stage.",
+  },
+  {
+    icon: "♛",
+    title: "THE RISE OF A KINGDOM",
+    description: "Valour, ambition and the legacy of the Cholas.",
+  },
+  {
+    icon: "✦",
+    title: "A LEGACY IMMORTALISED",
+    description: "A tribute to Tamil history and heritage.",
+  },
+];
+
 export default function Home() {
   const [showPicker, setShowPicker] = useState(false);
   const [selectedShow, setSelectedShow] = useState(null);
 
-  // Show the existing seat booking page after a show is selected.
   if (selectedShow) {
     return (
-      <main>
+      <main className={styles.bookingPage}>
         <button
           type="button"
           className={styles.backButton}
@@ -61,86 +71,132 @@ export default function Home() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.navbar}>
-        <a href="#home" className={styles.logo}>
-          <span>🎭</span> THESPIAN TICKETS
-        </a>
-
-        <span className={styles.navLabel}>
-          THEATRE EXPERIENCE
-        </span>
-      </header>
-
+      {/* Desktop poster — unchanged */}
       <section className={styles.hero} id="home">
-        <div
-          className={`${styles.curtain} ${styles.curtainLeft}`}
-        />
-        <div
-          className={`${styles.curtain} ${styles.curtainRight}`}
-        />
-
-        <div className={styles.heroContent}>
-          <p className={styles.eyebrow}>
-            AN EPIC THEATRICAL EXPERIENCE
-          </p>
-
-          <div className={styles.ornament}>
-            ✦ ━━━━━ ✦
-          </div>
-
-          <h1>
-            PONNIYIN SELVAN
-            <span>KARIKALA YUGAM</span>
-          </h1>
-
-          <p className={styles.description}>
-            Witness the legend. Experience the grandeur.
-          </p>
+        <div className={styles.poster}>
+          <Image
+            src="/images/ponniyin-selvan-hero.png"
+            alt="Ponniyin Selvan: Karikala Yugam theatrical poster"
+            fill
+            priority
+            sizes="100vw"
+            className={styles.posterImage}
+          />
 
           <button
             type="button"
-            className={styles.bookButton}
+            className={styles.posterBookButton}
+            aria-label="Book your seats"
             onClick={() => setShowPicker(true)}
-          >
-            BOOK TICKETS <span>→</span>
-          </button>
-
-          <p className={styles.hint}>
-            SELECT YOUR SHOW · RESERVE YOUR SEATS
-          </p>
+          />
         </div>
 
-        <div className={styles.stageFloor} />
-      </section>
+        {/* Mobile-only front page */}
+        <div className={styles.mobileLanding}>
+          <header className={styles.mobileHeader}>
+            <span className={styles.mobileLogo} aria-hidden="true">
+              ♜
+            </span>
+            <span className={styles.mobileBrand}>
+              THESPIANS’
+              <br />
+              SOCIETY
+            </span>
+          </header>
 
-      <section className={styles.eventInfo}>
-        <div className={styles.infoItem}>
-          <span className={styles.infoIcon}>▦</span>
-          <div>
-            <p className={styles.infoLabel}>SHOW DATES</p>
-            <p className={styles.infoValue}>
-              28 &amp; 29 October 2026
+          <div className={styles.mobileArtwork}>
+            <Image
+              src="/images/karikala-mobile.jpg"
+              alt="Karikala Chola standing proudly against a golden sunset"
+              fill
+              priority
+              sizes="100vw"
+              className={styles.mobileArtworkImage}
+            />
+          </div>
+
+          <div className={styles.mobileContent}>
+            <p className={styles.mobileEyebrow}>
+              ✦ &nbsp; A LEGEND RETURNS TO THE STAGE &nbsp; ✦
+            </p>
+
+            <h1 className={styles.mobileTitle}>
+              PONNIYIN SELVAN
+              <span>KARIKALA YUGAM</span>
+            </h1>
+
+            <p className={styles.mobileTagline}>
+              AN EMPIRE. A LEGACY.
+              <br />
+              AN EPIC BROUGHT TO LIFE.
+            </p>
+
+            <div className={styles.mobileDetails}>
+              <div className={styles.mobileDetail}>
+                <span className={styles.mobileDetailIcon} aria-hidden="true">
+                  ▦
+                </span>
+                <div>
+                  <strong>28 &amp; 29 OCTOBER 2026</strong>
+                  <span>PERFORMANCE DATES</span>
+                </div>
+              </div>
+
+              <div className={styles.mobileDetail}>
+                <span className={styles.mobileDetailIcon} aria-hidden="true">
+                  ◷
+                </span>
+                <div>
+                  <strong>6:00 PM</strong>
+                  <span>CURTAIN RISES</span>
+                </div>
+              </div>
+
+              <div className={styles.mobileDetail}>
+                <span className={styles.mobileDetailIcon} aria-hidden="true">
+                  ♧
+                </span>
+                <div>
+                  <strong>EEE AUDITORIUM</strong>
+                  <span>THE VENUE</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className={styles.mobileBookButton}
+              onClick={() => setShowPicker(true)}
+            >
+              BOOK YOUR SEATS <span aria-hidden="true">→</span>
+            </button>
+
+            <p className={styles.mobileFootnote}>
+              CHOOSE YOUR SHOW · EXPERIENCE THE EPIC
             </p>
           </div>
         </div>
-
-        <div className={styles.infoItem}>
-          <span className={styles.infoIcon}>◷</span>
-          <div>
-            <p className={styles.infoLabel}>SHOW TIME</p>
-            <p className={styles.infoValue}>6:00 PM</p>
-          </div>
-        </div>
-
-        <div className={styles.infoItem}>
-          <span className={styles.infoIcon}>⌖</span>
-          <div>
-            <p className={styles.infoLabel}>VENUE</p>
-            <p className={styles.infoValue}>EEE Auditorium</p>
-          </div>
-        </div>
       </section>
 
+      {/* Existing feature strip */}
+      <section
+        className={styles.features}
+        aria-label="About the theatrical experience"
+      >
+        {FEATURES.map((feature) => (
+          <article className={styles.featureCard} key={feature.title}>
+            <span className={styles.featureIcon} aria-hidden="true">
+              {feature.icon}
+            </span>
+            <h2>{feature.title}</h2>
+            <p>{feature.description}</p>
+          </article>
+        ))}
+      </section>
+
+
+
+      {/* Existing show-selection popup */}
       {showPicker && (
         <div
           className={styles.overlay}
@@ -200,7 +256,7 @@ export default function Home() {
             </div>
 
             <p className={styles.modalFootnote}>
-              Your show selection comes before seat selection.
+              Select a performance to continue to seat selection.
             </p>
           </section>
         </div>
@@ -208,4 +264,3 @@ export default function Home() {
     </main>
   );
 }
-
