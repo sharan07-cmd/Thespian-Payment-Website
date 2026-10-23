@@ -12,6 +12,18 @@
     onContinue,
     paymentMessage,
   }) {
+
+    const getSeatPrice = (seatId) => {
+      const row = seatId.split("-")[0];
+
+      if (["A", "B", "C", "D", "E"].includes(row)) return 75;
+      if (["F", "G", "H", "I", "J", "K"].includes(row)) return 50;
+      if (["L", "M", "N", "O", "P"].includes(row)) return 40;
+
+      return 0;
+    };
+
+
     const amount = Number(reservation.total_paise) / 100;
     const expiresAt = new Date(reservation.expires_at);
 
@@ -299,28 +311,18 @@
               <strong>{seats.length}</strong>
             </div>
 
-            <div className="detailRow">
-              <span>Price per ticket</span>
-              <strong>₹50.00</strong>
-            </div>
+            {seats.map((seatId) => (
+              <div className="detailRow" key={seatId}>
+                <span>{seatId} · Price</span>
+                <strong>₹{getSeatPrice(seatId).toFixed(2)}</strong>
+              </div>
+            ))}
 
             <div className="detailRow totalRow">
               <span>Total amount</span>
               <strong>₹{amount.toFixed(2)}</strong>
             </div>
           </section>
-
-          <div className="expiry">
-            <strong>Reservation expiry</strong>
-            <p>
-              {Number.isNaN(expiresAt.getTime())
-                ? "Expiry time unavailable"
-                : expiresAt.toLocaleString()}
-            </p>
-            <small>
-              Complete payment before your reservation expires.
-            </small>
-          </div>
 
           <button
             type="button"
@@ -354,25 +356,29 @@
         </div>
 
         <style jsx>{`
+
           .checkoutPage {
             min-height: 100vh;
-            padding: 0 16px 24px;
+            padding: 20px 16px 32px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
             color: var(--ink);
+            box-sizing: border-box;
           }
 
           .checkoutCard {
             width: 100%;
             max-width: 460px;
-            margin-top: -35px;
+            margin-top: 0;
             padding: 22px;
             border: 1px solid rgba(201, 162, 39, 0.25);
             border-radius: 16px;
             background: var(--bg-panel);
             box-shadow: 0 18px 60px rgba(0, 0, 0, 0.15);
+            box-sizing: border-box;
           }
+
 
           .eyebrow {
             color: var(--gold);
