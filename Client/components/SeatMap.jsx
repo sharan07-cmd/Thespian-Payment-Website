@@ -1941,51 +1941,27 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
 
 
 
-/* Mobile: prevent sticky hover colours on touchscreens */
-      @media (hover: none), (pointer: coarse) {
-        .seat.premium:hover:not(:disabled):not(.selected),
-        .seat.standard:hover:not(:disabled):not(.selected),
-        .seat.economy:hover:not(:disabled):not(.selected),
-        .seat:hover:not(:disabled):not(.selected) {
-          background: transparent;
-          transform: none;
-          filter: none;
-          box-shadow: none;
-        }
+@media (hover: none) {
+  .seat:hover:not(:disabled):not(.selected) {
+    background: transparent !important;
+    transform: none !important;
+  }
 
-        .seat {
-          -webkit-tap-highlight-color: transparent;
-        }
+  .seat:focus:not(.selected),
+  .seat:active:not(.selected) {
+    background: transparent !important;
+    transform: none !important;
+    outline: none;
+  }
 
-        /* Preserve the actual selected-seat appearance */
-        .seat.selected,
-        .seat.selected:hover,
-        .seat.selected:focus,
-        .seat.selected:active {
-          background: var(--gold-bright);
-          border-color: var(--gold-bright);
-          transform: none;
-        }
-      }
-
-      /* Hover effects only on devices with a real mouse */
-      @media (hover: hover) and (pointer: fine) {
-        .seat.premium:hover:not(:disabled):not(.selected) {
-          background: rgba(217, 180, 91, 0.2);
-        }
-
-        .seat.standard:hover:not(:disabled):not(.selected) {
-          background: rgba(131, 169, 217, 0.2);
-        }
-
-        .seat.economy:hover:not(:disabled):not(.selected) {
-          background: rgba(119, 184, 154, 0.2);
-        }
-
-        .seat:hover:not(:disabled):not(.selected) {
-          transform: translateY(-2px);
-        }
-      }
+  .seat.selected,
+  .seat.selected:hover,
+  .seat.selected:focus,
+  .seat.selected:active {
+    background: var(--gold-bright) !important;
+    border-color: var(--gold-bright) !important;
+  }
+}
 
       `}</style>
     </div>
