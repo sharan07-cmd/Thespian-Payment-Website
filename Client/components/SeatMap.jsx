@@ -3,13 +3,15 @@
 
 import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
-import { generateSeatLayout, SEAT_PRICE } from "@/lib/seatLayout";
+import { generateSeatLayout, getSeatPrice } from "@/lib/seatLayout";
 import Checkout from "@/components/Checkout";
 import QRCode from "qrcode";
 
 export default function SeatMap({ showId, showTitle, showSubtitle }) {
   const { rows, totalSeats } = useMemo(() => generateSeatLayout(), []);
   const [selected, setSelected] = useState(() => new Set());
+  const [ticketQuantity, setTicketQuantity] = useState(2);
+  const [showQuantityModal, setShowQuantityModal] = useState(true);
   const [unavailableSeats, setUnavailableSeats] = useState(() => new Set());
 
   
@@ -76,23 +78,33 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
   };
 }, [showId]);
 
+
   function toggleSeat(seat) {
     if (
-    seat.status === "booked" ||
-    unavailableSeats.has(seat.id)
-  ) {
-    return;
-  }
+      seat.status === "booked" ||
+      unavailableSeats.has(seat.id)
+    ) {
+      return;
+    }
+
     setSelected((prev) => {
       const next = new Set(prev);
+
       if (next.has(seat.id)) {
         next.delete(seat.id);
       } else {
+        // Do not allow more seats than the chosen quantity.
+        if (next.size >= ticketQuantity) {
+          return prev;
+        }
+
         next.add(seat.id);
       }
+
       return next;
     });
   }
+
 
   
   async function reserveSeats() {
@@ -158,9 +170,29 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
   }
 
 
-  const selectedList = Array.from(selected).sort();
-  const total = selectedList.length * SEAT_PRICE;
+ const selectedList = Array.from(selected).sort();
 
+  const seatPrices = useMemo(
+    () =>
+      new Map(
+        rows.flatMap((row) =>
+          row.blocks.flatMap((block) =>
+            block
+              .filter((seat) => seat.status !== "empty")
+              .map((seat) => [
+                seat.id,
+                getSeatPrice(row.rowNumber),
+              ])
+          )
+        )
+      ),
+    [rows]
+  );
+
+  const total = selectedList.reduce(
+    (sum, seatId) => sum + (seatPrices.get(seatId) ?? 0),
+    0
+  );
   
   
   
@@ -779,6 +811,80 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
         <div className="stage">STAGE</div>
       </div>
 
+      
+      {showQuantityModal && (
+        <div className="quantityOverlay">
+          <section
+            className="quantityModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quantityTitle"
+          >
+            <p className="quantityEyebrow">THESPIAN TICKETS</p>
+
+            <h2 id="quantityTitle">How many tickets?</h2>
+
+            <p className="quantitySubtitle">
+              Choose the number of seats you want to book.
+            </p>
+
+            <div className="quantityOptions">
+              {[1, 2, 3, 4, 5].map((number) => (
+                <button
+                  key={number}
+                  type="button"
+                  className={`quantityOption ${
+                    ticketQuantity === number ? "active" : ""
+                  }`}
+                  aria-pressed={ticketQuantity === number}
+                  onClick={() => setTicketQuantity(number)}
+                >
+                  {number}
+                </button>
+              ))}
+            </div>
+
+            <div className="quantityDivider" />
+
+            <div className="quantityPrices">
+              <div className="quantityPrice premiumText">
+                <span>PREMIUM</span>
+                <strong>₹75</strong>
+                <small>Rows A–E</small>
+              </div>
+
+              <div className="quantityPrice standardText">
+                <span>CLASSIC</span>
+                <strong>₹50</strong>
+                <small>Rows F–K</small>
+              </div>
+
+              <div className="quantityPrice economyText">
+                <span>ECONOMY</span>
+                <strong>₹40</strong>
+                <small>Rows L–P</small>
+              </div>
+            </div>
+
+            <p className="quantityNote">
+              Final price depends on the seats you select.
+            </p>
+
+            <button
+              type="button"
+              className="quantityContinue"
+              onClick={() => {
+                setSelected(new Set());
+                setShowQuantityModal(false);
+              }}
+            >
+              Select Seats
+            </button>
+          </section>
+        </div>
+      )}
+
+
       <div className="mapScroll">
         <div className="map">
           {rows.map((row) => (
@@ -795,9 +901,11 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
                       left: "50%",
                       top: "50%",
                       transform: "translate(-50%, -50%)",
-                      color: "rgba(201, 162, 39, 0.25)",
+                      color:  "#e8c75a",
                       pointerEvents: "none",
                       zIndex: 0,
+                      animation: "arrowShimmer 2.2s ease-in-out infinite",
+                      filter: "drop-shadow(0 0 4px rgba(255, 215, 100, 0.75))",
                     }}
                   >
                     <svg aria-hidden="true" width="24" height="140" viewBox="0 0 24 140" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -823,16 +931,23 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
                             unavailableSeats.has(seat.id) || seat.status === "booked"
                               ? "booked"
                               : seat.status
+                          } ${
+                            getSeatPrice(row.rowNumber) === 75
+                              ? "premium"
+                              : getSeatPrice(row.rowNumber) === 50
+                                ? "standard"
+                                : "economy"
                           } ${selected.has(seat.id) ? "selected" : ""}`}
                           disabled={
+                            showQuantityModal ||
                             showForm ||
                             showCheckout ||
                             seat.status === "booked" ||
                             unavailableSeats.has(seat.id)
                           }
                           onClick={() => toggleSeat(seat)}
-                          aria-label={`Seat ${seat.label}`}
-                          title={seat.label}
+                          aria-label={`Seat ${seat.label}, ₹${getSeatPrice(row.rowNumber)}`}
+                          title={`Seat ${seat.label} — ₹${getSeatPrice(row.rowNumber)}`}
                         />
                       );
                     })}
@@ -849,11 +964,25 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
         <span className="legendItem">
           <i className="swatch available" /> Available
         </span>
+
         <span className="legendItem">
           <i className="swatch selected" /> Selected
         </span>
+
         <span className="legendItem">
           <i className="swatch booked" /> Taken
+        </span>
+
+        <span className="legendItem">
+          <i className="swatch premiumPrice" /> Rows A–E: ₹75
+        </span>
+
+        <span className="legendItem">
+          <i className="swatch standardPrice" /> Rows F–K: ₹50
+        </span>
+
+        <span className="legendItem">
+          <i className="swatch economyPrice" /> Rows L–P: ₹40
         </span>
       </div>
 
@@ -1122,6 +1251,20 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
           animation: driftUp 3s infinite ease-in-out;
         }
 
+        @keyframes arrowShimmer {
+          0%, 100% {
+            opacity: 0.35;
+            filter: drop-shadow(0 0 2px rgba(255, 215, 100, 0.3));
+          }
+
+          50% {
+            opacity: 1;
+            filter:
+              drop-shadow(0 0 5px rgba(255, 215, 100, 0.9))
+              drop-shadow(0 0 12px rgba(255, 190, 60, 0.65));
+          }
+        }
+
         @keyframes driftUp {
           0%, 100% { transform: translate(-50%, -50%); }
           50% { transform: translate(-50%, -58%); }
@@ -1143,6 +1286,30 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
           transition: transform 0.12s ease, background 0.12s ease;
         }
 
+        .seat.premium {
+          border-color: #d9b45b;
+        }
+
+        .seat.standard {
+          border-color: #83a9d9;
+        }
+
+        .seat.economy {
+          border-color: #77b89a;
+        }
+
+        .seat.premium:hover:not(:disabled) {
+          background: rgba(217, 180, 91, 0.2);
+        }
+
+        .seat.standard:hover:not(:disabled) {
+          background: rgba(131, 169, 217, 0.2);
+        }
+
+        .seat.economy:hover:not(:disabled) {
+          background: rgba(119, 184, 154, 0.2);
+        }
+
         .seat.empty {
           visibility: hidden;
           pointer-events: none;
@@ -1150,12 +1317,15 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
           background: transparent;
         }
 
-        .seat:hover:not(:disabled) {
+        .seat:hover:not(:disabled):not(.selected) {
           transform: translateY(-2px);
           background: rgba(201, 162, 39, 0.18);
         }
 
-        .seat.selected {
+        .seat.selected,
+        .seat.selected:hover,
+        .seat.selected:focus,
+        .seat.selected:active {
           background: var(--gold-bright);
           border-color: var(--gold-bright);
         }
@@ -1169,7 +1339,8 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
         .legend {
           display: flex;
           justify-content: center;
-          gap: 20px;
+          align-items: center;
+          gap: 10px 16px;
           margin-top: 14px;
           flex-wrap: wrap;
         }
@@ -1177,9 +1348,27 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
         .legendItem {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
-          font-size: 12px;
+          gap: 6px;
+          font-size: 11px;
           color: var(--ink-muted);
+          white-space: nowrap;
+        }
+
+        @media (max-width: 480px) {
+          .legend {
+            gap: 10px 12px;
+          }
+
+          .legendItem {
+            font-size: 10px;
+            gap: 5px;
+          }
+
+          .swatch {
+            width: 11px;
+            height: 11px;
+            flex-shrink: 0;
+          }
         }
 
         .swatch {
@@ -1202,6 +1391,21 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
         .swatch.booked {
           background: var(--booked);
           border-color: var(--booked);
+        }
+
+        .swatch.premiumPrice {
+          background: #d9b45b;
+          border-color: #d9b45b;
+        }
+
+        .swatch.standardPrice {
+          background: #83a9d9;
+          border-color: #83a9d9;
+        }
+
+        .swatch.economyPrice {
+          background: #77b89a;
+          border-color: #77b89a;
         }
 
         .summaryBar {
@@ -1502,7 +1706,244 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
 
       @media (max-width: 480px) {
         .bookingModal {
-          padding: 23
+          padding: 23;
+        }
+      }
+
+      
+      /* =====================================
+        INITIAL TICKET QUANTITY POPUP
+      ===================================== */
+
+      .quantityOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 900;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow-y: auto;
+        padding: 20px 14px;
+        box-sizing: border-box;
+        background: rgba(8, 4, 6, 0.76);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+      }
+
+      .quantityModal {
+        width: 100%;
+        max-width: 470px;
+        margin: auto;
+        padding: 28px 24px 22px;
+        box-sizing: border-box;
+        border: 1px solid rgba(201, 162, 39, 0.7);
+        border-radius: 18px;
+        background: var(--bg-panel);
+        color: var(--ink);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+        text-align: center;
+      }
+
+      .quantityEyebrow {
+        margin: 0 0 12px;
+        color: var(--gold);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+      }
+
+      .quantityModal h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: clamp(24px, 5vw, 30px);
+        font-weight: 500;
+      }
+
+      .quantitySubtitle {
+        margin: 10px 0 22px;
+        color: var(--ink-muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      /* Quantity buttons: 1, 2, 3, 4, 5 */
+
+      .quantityOptions {
+        display: flex;
+        justify-content: center;
+        gap: clamp(8px, 3vw, 15px);
+      }
+
+      .quantityOption {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
+        border: 1px solid rgba(201, 162, 39, 0.4);
+        border-radius: 50%;
+        background: rgba(201, 162, 39, 0.06);
+        color: var(--ink);
+        font: inherit;
+        font-size: 16px;
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease,
+          transform 0.15s ease;
+      }
+
+      .quantityOption:hover {
+        border-color: var(--gold);
+        transform: translateY(-1px);
+      }
+
+      .quantityOption.active {
+        background: var(--gold);
+        border-color: var(--gold-bright);
+        color: #1a0f10;
+        font-weight: 700;
+      }
+
+      /* Divider */
+
+      .quantityDivider {
+        height: 1px;
+        margin: 24px 0 20px;
+        background: rgba(201, 162, 39, 0.22);
+      }
+
+      /* Three ticket price tiers */
+
+      .quantityPrices {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .quantityPrice {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .quantityPrice span {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .quantityPrice strong {
+        color: var(--ink);
+        font-size: clamp(19px, 4vw, 23px);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .quantityPrice small {
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+
+      .premiumText span {
+        color: #d9b45b;
+      }
+
+      .standardText span {
+        color: #83a9d9;
+      }
+
+      .economyText span {
+        color: #77b89a;
+      }
+
+      /* Pricing note */
+
+      .quantityNote {
+        margin: 19px 0;
+        color: var(--ink-muted);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      /* Select Seats button */
+
+      .quantityContinue {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        box-sizing: border-box;
+        padding: 12px 16px;
+        border: 1px solid var(--gold);
+        border-radius: 9px;
+        background: var(--gold);
+        color: #1a0f10;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+
+      .quantityContinue:hover {
+        background: var(--gold-bright);
+      }
+
+      .quantityContinue:focus-visible,
+      .quantityOption:focus-visible {
+        outline: 2px solid var(--gold-bright);
+        outline-offset: 3px;
+      }
+
+      /* Mobile layout */
+
+      @media (max-width: 480px) {
+        .quantityOverlay {
+          padding: 16px 12px;
+        }
+
+        .quantityModal {
+          padding: 25px 17px 18px;
+          border-radius: 15px;
+        }
+
+        .quantityOptions {
+          gap: 10px;
+        }
+
+        .quantityOption {
+          width: 39px;
+          height: 39px;
+          flex-basis: 39px;
+        }
+
+        .quantityDivider {
+          margin: 20px 0 17px;
+        }
+
+        .quantityPrice span {
+          font-size: 9px;
+        }
+
+        .quantityPrice small {
+          font-size: 10px;
+        }
+      }
+
+
+      @media (hover: none) {
+        .seat:hover:not(.selected) {
+          background: transparent;
+          transform: none;
+        }
+
+        .seat.selected,
+        .seat.selected:hover,
+        .seat.selected:focus,
+        .seat.selected:active {
+          background: var(--gold-bright);
+          border-color: var(--gold-bright);
+        }
+      }
       `}</style>
     </div>
   );
