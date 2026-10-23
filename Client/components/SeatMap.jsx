@@ -108,6 +108,12 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
 
   
   async function reserveSeats() {
+    if (selectedList.length !== ticketQuantity) {
+      setMessage(
+        `Please select exactly ${ticketQuantity} seats to continue.`
+      );
+      return;
+    }
     setLoading(true);
     setMessage("");
 
@@ -1005,17 +1011,21 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
               <button 
                 type="button"
                 className="continueBtn"
-                disabled={
-                  selectedList.length === 0 ||
-                  selectedList.length > 5
-                }
+                disabled={selectedList.length !== ticketQuantity}
                 onClick={() => {
+
+                  if (selectedList.length !== ticketQuantity) {
+                    setMessage(
+                      `Please select exactly ${ticketQuantity} seats to continue.`
+                    );
+                    return;
+                  }
                   setShowForm(true);
                   setMessage("");
                   setReservation(null);
                 }}
               >
-                Continue
+                Continue ({selectedList.length}/{ticketQuantity})
               </button>
 
         </div>
