@@ -1068,7 +1068,7 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
 
               <p>
                 <strong>After Booking:</strong> Scroll down and
-                download the PDF TICKETS after succesful payment. You will also receive an email with your ticket details.
+                download the PDF TICKETS after succesful payment or take a screenshot of the Ticket Code.
               </p>
             
             </div>
