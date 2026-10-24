@@ -71,7 +71,7 @@ export default function Home() {
       </main>
     );
   }
-
+ //jus a dummy line
   return (
     <main className={styles.page}>
       {/* Desktop poster — unchanged */}
