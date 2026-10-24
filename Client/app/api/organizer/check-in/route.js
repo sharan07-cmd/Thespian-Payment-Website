@@ -5,6 +5,11 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const TICKET_CODE_RE = /^TKT-[A-Z0-9]+$/i;
+
 export async function POST(request) {
   try {
     // 1. Verify the logged-in organiser session.
@@ -45,8 +50,22 @@ export async function POST(request) {
     // 3. Validate the QR token and requested action.
     const body = await request.json();
 
-    const token =
+    const rawToken =
       typeof body.token === "string" ? body.token.trim() : "";
+
+    const rawTicketCode =
+      typeof body.ticketCode === "string"
+        ? body.ticketCode.trim().toUpperCase()
+        : "";
+
+    let token = UUID_RE.test(rawToken) ? rawToken : "";
+
+    const ticketCode = TICKET_CODE_RE.test(rawTicketCode)
+      ? rawTicketCode
+      : !token && TICKET_CODE_RE.test(rawToken.toUpperCase())
+        ? rawToken.toUpperCase()
+        : "";
+
 
     const action = body.action;
     const showId = body.showId;
@@ -61,13 +80,13 @@ export async function POST(request) {
       );
     }
 
-    if (
-      !token ||
-      token.length > 100 ||
-      !/^[0-9a-f-]{36}$/i.test(token)
-    ) {
+    if (!token && !ticketCode) {
       return NextResponse.json(
-        { error: "Invalid ticket QR code." },
+        {
+          success: false,
+          error:
+            "Invalid input. Enter a valid ticket code or scan a ticket QR code.",
+        },
         { status: 400 }
       );
     }
@@ -80,23 +99,46 @@ export async function POST(request) {
     }
 
     // Verify that the ticket belongs to the selected show.
-    const {
-      data: matchingTicket,
-      error: ticketLookupError,
-    } = await supabaseAdmin
-      .from("tickets")
-      .select("id, show_id")
-      .eq("barcode_token", token)
-      .eq("show_id", showId)
-      .maybeSingle();
+    // Find the ticket by its code or QR token, within the selected show.
+    let matchingTicket;
+    let ticketLookupError;
+
+    if (ticketCode) {
+      const lookup = await supabaseAdmin
+        .from("tickets")
+        .select("id, show_id, barcode_token")
+        .eq("ticket_code", ticketCode)
+        .eq("show_id", showId)
+        .maybeSingle();
+
+      matchingTicket = lookup.data;
+      ticketLookupError = lookup.error;
+
+      if (matchingTicket) {
+        token =
+          typeof matchingTicket.barcode_token === "string"
+            ? matchingTicket.barcode_token.trim()
+            : "";
+      }
+    } else {
+      const lookup = await supabaseAdmin
+        .from("tickets")
+        .select("id, show_id")
+        .eq("barcode_token", token)
+        .eq("show_id", showId)
+        .maybeSingle();
+
+      matchingTicket = lookup.data;
+      ticketLookupError = lookup.error;
+    }
 
     if (ticketLookupError) {
-      console.error("Ticket show lookup failed:", ticketLookupError);
+      console.error("Ticket lookup failed:", ticketLookupError);
 
       return NextResponse.json(
         {
           success: false,
-          error: "Could not verify which show this ticket belongs to.",
+          error: "Could not verify the ticket for the selected show.",
         },
         { status: 500 }
       );
@@ -106,7 +148,19 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "This ticket does not belong to the selected show, or the ticket was not found.",
+          error:
+            "Ticket not found for the selected show. Check the ticket code and selected show.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (!token || !UUID_RE.test(token)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This ticket has no valid QR verification token. Please contact the organiser administrator.",
         },
         { status: 409 }
       );

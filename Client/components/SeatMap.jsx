@@ -7,14 +7,14 @@ import { generateSeatLayout, getSeatPrice } from "@/lib/seatLayout";
 import Checkout from "@/components/Checkout";
 import QRCode from "qrcode";
 
-export default function SeatMap({ showId, showTitle, showSubtitle }) {
+export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowSelection }) {
   const { rows, totalSeats } = useMemo(() => generateSeatLayout(), []);
   const [selected, setSelected] = useState(() => new Set());
   const [ticketQuantity, setTicketQuantity] = useState(2);
   const [showQuantityModal, setShowQuantityModal] = useState(true);
   const [unavailableSeats, setUnavailableSeats] = useState(() => new Set());
 
-  
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -1013,14 +1013,14 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
                 className="continueBtn"
                 disabled={selectedList.length !== ticketQuantity}
                 onClick={() => {
-
                   if (selectedList.length !== ticketQuantity) {
                     setMessage(
                       `Please select exactly ${ticketQuantity} seats to continue.`
                     );
                     return;
                   }
-                  setShowForm(true);
+
+                  setShowInfo(true);
                   setMessage("");
                   setReservation(null);
                 }}
@@ -1032,6 +1032,74 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
       </div>
       
       
+      {showInfo && !reservation && (
+        <div className="infoModalOverlay">
+          <section
+            className="infoModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="infoTitle"
+          >
+            <p className="infoEyebrow">THESPIAN TICKETS</p>
+
+            <h2 id="infoTitle">Important Information</h2>
+
+            <p className="infoDescription">
+              Please read the following information before
+              proceeding with your booking.
+            </p>
+
+            <div className="infoNotice">
+              <p>
+                <strong>Faculty members:</strong> Professors
+                will be present on 28th October for the event.
+              </p>
+
+              <p>
+                <strong>Booking assistance:</strong> If you
+                experience any issues with booking or payment,
+                please contact +91 6379015839.
+              </p>
+
+              <p>
+                <strong>Before proceeding:</strong> Please check
+                your selected seats and total amount carefully. Scroll down for payment after selecting the seats.
+              </p>
+
+              <p>
+                <strong>After Booking:</strong> Scroll down and
+                download the PDF TICKETS after succesful payment. You will also receive an email with your ticket details.
+              </p>
+            
+            </div>
+
+            <div className="infoActions">
+              <button
+                type="button"
+                className="infoBackButton"
+                onClick={() => {
+                  setShowInfo(false);
+                  onBackToShowSelection?.();
+                }}
+              >
+                ← Back to Show Selection
+              </button>
+
+              <button
+                type="button"
+                className="infoContinueButton"
+                onClick={() => {
+                  setShowInfo(false);
+                  setShowForm(true);
+                }}
+              >
+                Continue to Details →
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       
       {showForm && !reservation && (
         <div className="bookingModalOverlay">
@@ -1490,6 +1558,115 @@ export default function SeatMap({ showId, showTitle, showSubtitle }) {
           color: var(--booked-text);
           cursor: not-allowed;
         }
+
+        
+        /* IMPORTANT INFORMATION MODAL */
+
+        .infoModalOverlay {
+          position: fixed;
+          inset: 0;
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow-y: auto;
+          padding: 20px 14px;
+          box-sizing: border-box;
+          background: rgba(8, 4, 6, 0.84);
+          backdrop-filter: blur(7px);
+        }
+
+        .infoModal {
+          width: 100%;
+          max-width: 460px;
+          margin: auto;
+          padding: 28px 24px;
+          box-sizing: border-box;
+          border: 1px solid rgba(201, 162, 39, 0.65);
+          border-radius: 18px;
+          background: var(--bg-panel);
+          color: var(--ink);
+          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+        }
+
+        .infoEyebrow {
+          margin: 0 0 10px;
+          color: var(--gold);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.2em;
+        }
+
+        .infoModal h2 {
+          margin: 0 0 10px;
+          font-family: var(--font-display);
+          font-size: clamp(24px, 5vw, 30px);
+          font-weight: 500;
+        }
+
+        .infoDescription {
+          color: var(--ink-muted);
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .infoNotice {
+          margin: 22px 0;
+          padding: 16px;
+          border: 1px solid rgba(201, 162, 39, 0.25);
+          border-radius: 12px;
+          background: rgba(201, 162, 39, 0.055);
+        }
+
+        .infoNotice p {
+          margin: 0 0 14px;
+          font-size: 13px;
+          line-height: 1.7;
+        }
+
+        .infoNotice p:last-child {
+          margin-bottom: 0;
+        }
+
+        .infoNotice strong {
+          color: var(--gold);
+        }
+
+        .infoActions {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .infoActions button {
+          width: 100%;
+          min-height: 46px;
+          padding: 12px;
+          border-radius: 9px;
+          font: inherit;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .infoBackButton {
+          border: 1px solid rgba(201, 162, 39, 0.4);
+          background: transparent;
+          color: var(--ink);
+        }
+
+        .infoContinueButton {
+          border: 1px solid var(--gold);
+          background: var(--gold);
+          color: #1a0f10;
+        }
+
+        @media (max-width: 480px) {
+          .infoModal {
+            padding: 23px 18px;
+          }
+        }
+
 
         /* ================================
    BOOKING MODAL

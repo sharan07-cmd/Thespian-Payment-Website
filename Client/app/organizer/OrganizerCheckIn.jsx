@@ -7,6 +7,8 @@ import QRScanner from "./QRScanner";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const TICKET_CODE_RE = /^TKT-[A-Z0-9]+$/i;
+
 function extractToken(value) {
   const text = String(value ?? "").trim();
 
@@ -35,13 +37,18 @@ export default function OrganizerCheckIn({showId}) {
   const verifyToken = useCallback(async (rawValue) => {
     if (requestInProgress.current) return;
 
-    const token = extractToken(rawValue);
+const submittedValue = extractToken(rawValue);
 
-    if (!UUID_RE.test(token)) {
-      setResult(null);
-      setError("Invalid QR code. No valid ticket token was found.");
-      return;
-    }
+const isQrToken = UUID_RE.test(submittedValue);
+const isTicketCode = TICKET_CODE_RE.test(submittedValue);
+
+if (!isQrToken && !isTicketCode) {
+  setResult(null);
+  setError(
+    "Enter a valid ticket code, such as TKT-DCA711CD, or scan a ticket QR code."
+  );
+  return;
+}
 
     requestInProgress.current = true;
     setLoading(true);
@@ -49,16 +56,22 @@ export default function OrganizerCheckIn({showId}) {
     setError("");
 
     console.log("Ticket scan request:", {
-      token,
       action,
       showId,
+      method: isQrToken ? "QR" : "ticket-code",
     });
 
     try {
       const response = await fetch("/api/organizer/check-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, action, showId }),
+        body: JSON.stringify({
+          ...(isQrToken
+            ? { token: submittedValue }
+            : { ticketCode: submittedValue.toUpperCase() }),
+          action,
+          showId,
+        }),
       });
 
       let data;
@@ -211,8 +224,8 @@ export default function OrganizerCheckIn({showId}) {
         <input
           value={manualToken}
           onChange={(event) => setManualToken(event.target.value)}
-          placeholder="Paste ticket token or QR URL"
-          aria-label="Ticket token or QR URL"
+          placeholder="Ticket code (e.g. TKT-DCA711CD)"
+          aria-label="Ticket code or QR Token"
           autoComplete="off"
           className="min-w-0 flex-1 rounded-lg border border-stone-700 bg-[#0f0f0e] px-4 py-3 text-sm text-white outline-none focus:border-[#d6b66b]"
         />

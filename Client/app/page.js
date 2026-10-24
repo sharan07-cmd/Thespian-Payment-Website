@@ -63,6 +63,10 @@ export default function Home() {
           showId={selectedShow.id}
           showTitle="Ponniyin Selvan: Karikala Yugam"
           showSubtitle={`${selectedShow.date}, ${selectedShow.time} · ${selectedShow.venue}`}
+          onBackToShowSelection={() => {
+            setSelectedShow(null);
+            setShowPicker(true);
+          }}
         />
       </main>
     );
