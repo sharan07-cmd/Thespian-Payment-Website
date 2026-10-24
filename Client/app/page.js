@@ -38,8 +38,8 @@ const FEATURES = [
   },
   {
     icon: "✦",
-    title: "A LEGACY IMMORTALISED",
-    description: "A tribute to Tamil history and heritage.",
+    title: "A SYMPHONY OF EXPRESSION",
+    description: "Collaboration of Music Troupe, Streaks and The Thespians' Society.",
   },
 ];
 
