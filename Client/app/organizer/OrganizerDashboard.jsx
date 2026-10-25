@@ -66,6 +66,10 @@ export default function OrganizerDashboard({showId}) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [bookingId, setBookingId] = useState("");
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+  const [pdfSuccess, setPdfSuccess] = useState("");
 
   const loadDashboard = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -110,6 +114,65 @@ export default function OrganizerDashboard({showId}) {
 
     return () => clearInterval(intervalId);
   }, [loadDashboard]);
+
+    const downloadBookingPDF = async () => {
+    const id = bookingId.trim();
+
+    if (!id) {
+      setPdfError("Please enter a booking ID.");
+      return;
+    }
+
+    setDownloadingPDF(true);
+    setPdfError("");
+    setPdfSuccess("");
+
+    try {
+      const params = new URLSearchParams({
+        bookingId: id,
+        showId: String(showId),
+      });
+
+      const response = await fetch(
+        `/api/organizer/booking-pdf?${params.toString()}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+        }
+      );
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(
+          result.error || "Could not download tickets for this booking."
+        );
+      }
+
+      const blob = await response.blob();
+
+      if (blob.type !== "application/pdf") {
+        throw new Error("The server did not return a valid PDF.");
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `THESPIAN-TICKETS-${id}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+      setPdfSuccess("Your booking PDF download has started.");
+    } catch (err) {
+      setPdfError(err.message || "PDF download failed.");
+    } finally {
+      setDownloadingPDF(false);
+    }
+  };
 
   return (
     <section
@@ -256,6 +319,108 @@ export default function OrganizerDashboard({showId}) {
           accent="#9c8be8"
         />
       </div>
+
+      <div
+  style={{
+    background: "#21191d",
+    border: "1px solid #443238",
+    borderRadius: 14,
+    padding: 20,
+    display: "grid",
+    gap: 14,
+  }}
+>
+  <div>
+    <div
+      style={{
+        color: GOLD,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: 2,
+        marginBottom: 7,
+      }}
+    >
+      BOOKING MANAGEMENT
+    </div>
+
+    <h3 style={{ fontSize: 18, margin: 0 }}>
+      Download booking tickets
+    </h3>
+
+    <p
+      style={{
+        color: "#b8a9ae",
+        fontSize: 13,
+        lineHeight: 1.6,
+        margin: "8px 0 0",
+      }}
+    >
+      Enter the booking ID to download all tickets associated
+      with that booking as a PDF.
+    </p>
+  </div>
+
+  <input
+    type="text"
+    value={bookingId}
+    onChange={(e) => {
+      setBookingId(e.target.value);
+      setPdfError("");
+      setPdfSuccess("");
+    }}
+    placeholder="Paste booking UUID here"
+    autoComplete="off"
+    spellCheck={false}
+    style={{
+      width: "100%",
+      boxSizing: "border-box",
+      background: "#191316",
+      color: "#fff8e9",
+      border: "1px solid #65502b",
+      borderRadius: 9,
+      padding: "13px 12px",
+      fontSize: 14,
+      outlineColor: GOLD,
+    }}
+  />
+
+  <button
+    type="button"
+    onClick={downloadBookingPDF}
+    disabled={downloadingPDF || !bookingId.trim()}
+    style={{
+      background: downloadingPDF ? "#51452b" : GOLD,
+      color: "#191316",
+      border: "none",
+      borderRadius: 9,
+      padding: "13px 16px",
+      fontWeight: 750,
+      fontSize: 14,
+      cursor: downloadingPDF ? "wait" : "pointer",
+      opacity: downloadingPDF || !bookingId.trim() ? 0.65 : 1,
+    }}
+  >
+    {downloadingPDF ? "Preparing PDF…" : "↓ Download booking PDF"}
+  </button>
+
+  {pdfError && (
+    <p
+      role="alert"
+      style={{ color: "#ffaaaa", fontSize: 13, margin: 0 }}
+    >
+      {pdfError}
+    </p>
+  )}
+
+  {pdfSuccess && (
+    <p
+      role="status"
+      style={{ color: "#65d69b", fontSize: 13, margin: 0 }}
+    >
+      {pdfSuccess}
+    </p>
+  )}
+</div>
 
       <div
         style={{
