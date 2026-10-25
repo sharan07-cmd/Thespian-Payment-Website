@@ -38,14 +38,21 @@ export async function GET(request) {
 
     const now = Date.now();
 
-    const unavailableSeats = (data ?? [])
-      .filter(
-        (claim) =>
-          claim.status === "booked" ||
-          (claim.status === "reserved" &&
-            new Date(claim.expires_at).getTime() > now)
-      )
-      .map((claim) => claim.seat_id);
+const unavailableSeats = (data ?? [])
+  .filter(
+    (claim) =>
+      claim.status === "booked" ||
+      (claim.status === "reserved" &&
+        new Date(claim.expires_at).getTime() > now)
+  )
+  .map((claim) => claim.seat_id);
+
+// Reserve the entire first row for the 28 October show.
+if (showId === "show-1") {
+  unavailableSeats.push(
+    ...Array.from({ length: 14 }, (_, index) => `A-${index + 1}`)
+  );
+}
 
     return NextResponse.json(
       { unavailableSeats },
