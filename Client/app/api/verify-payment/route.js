@@ -6,6 +6,30 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
+function getSeatPricePaise(seatId) {
+  const match = /^([A-P])-(\d{1,2})$/.exec(seatId ?? "");
+
+  if (!match) return null;
+
+  const row = match[1];
+  const seatNumber = Number(match[2]);
+
+  if (["A", "B", "C", "D", "E", "L", "M", "N", "O"].includes(row)) {
+    if (seatNumber < 1 || seatNumber > 14) return null;
+  } else if (["F", "G", "H", "I", "J", "K"].includes(row)) {
+    if (seatNumber < 1 || seatNumber > 12) return null;
+  } else if (row === "P") {
+    if (seatNumber < 1 || seatNumber > 17) return null;
+  } else {
+    return null;
+  }
+
+  if (["A", "B", "C", "D", "E"].includes(row)) return 7500;
+  if (["F", "G", "H", "I", "J", "K"].includes(row)) return 5000;
+
+  return 4000;
+}
+
 export async function POST(request) {
   try {
     const keyId = process.env.RAZORPAY_KEY_ID;
@@ -21,14 +45,23 @@ export async function POST(request) {
       );
     }
 
-    const body = await request.json();
+    let body;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Invalid request body." },
+        { status: 400 }
+      );
+    }
 
     const {
       bookingId,
       razorpay_order_id: orderId,
       razorpay_payment_id: paymentId,
       razorpay_signature: signature,
-    } = body;
+    } = body ?? {};
 
     if (
       typeof bookingId !== "string" ||
@@ -51,24 +84,20 @@ export async function POST(request) {
       );
     }
 
-    // 1. Retrieve the booking.
-    const { data: booking, error: bookingError } =
-      await supabaseAdmin
-        .from("bookings")
-        .select(
-          "id, show_id, quantity, amount_paise, status, razorpay_order_id, razorpay_payment_id"
-        )
-        .eq("id", bookingId)
-        .maybeSingle();
+    // 1. Retrieve the booking and verify its order.
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from("bookings")
+      .select(
+        "id, show_id, quantity, amount_paise, status, payment_status, razorpay_order_id, razorpay_payment_id"
+      )
+      .eq("id", bookingId)
+      .maybeSingle();
 
     if (bookingError) {
       console.error("Booking lookup error:", bookingError.message);
 
       return NextResponse.json(
-        {
-          success: false,
-          message: "Could not retrieve booking.",
-        },
+        { success: false, message: "Could not retrieve booking." },
         { status: 500 }
       );
     }
@@ -85,18 +114,14 @@ export async function POST(request) {
 
     if (!booking.show_id) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "This booking has no associated show.",
-        },
+        { success: false, message: "This booking has no associated show." },
         { status: 409 }
       );
     }
 
-
     // 2. Verify Razorpay's checkout signature.
     const expectedSignature = createHmac("sha256", keySecret)
-      .update(orderId + "|" + paymentId)
+      .update(`${orderId}|${paymentId}`)
       .digest();
 
     const receivedSignature = Buffer.from(signature, "hex");
@@ -114,114 +139,41 @@ export async function POST(request) {
       );
     }
 
-
-    // 3. Verify the total against the dynamically priced seats.
-    const { data: claims, error: claimsError } = await supabaseAdmin
-      .from("seat_claims")
-      .select("seat_id, status, expires_at")
-      .eq("booking_id", bookingId);
-
-    if (claimsError) {
-      console.error("Seat claim lookup error:", claimsError.message);
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Could not verify the reserved seats.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const now = Date.now();
-
-    const activeClaims = (claims ?? []).filter(
-      (claim) =>
-        claim.status === "booked" ||
-        (claim.status === "reserved" &&
-          claim.expires_at &&
-          new Date(claim.expires_at).getTime() > now)
-    );
-
-    const uniqueSeatIds = new Set(
-      activeClaims.map((claim) => claim.seat_id)
-    );
-
-    function getSeatPricePaise(seatId) {
-      const match = /^([A-P])-(\d{1,2})$/.exec(seatId ?? "");
-
-      if (!match) return null;
-
-      const row = match[1];
-      const seatNumber = Number(match[2]);
-
-      if (["A", "B", "C", "D", "E", "L", "M", "N", "O"].includes(row)) {
-        if (seatNumber < 1 || seatNumber > 14) return null;
-      } else if (["F", "G", "H", "I", "J", "K"].includes(row)) {
-        if (seatNumber < 1 || seatNumber > 12) return null;
-      } else if (row === "P") {
-        if (seatNumber < 1 || seatNumber > 17) return null;
-      } else {
-        return null;
-      }
-
-      if (["A", "B", "C", "D", "E"].includes(row)) return 7500;
-      if (["F", "G", "H", "I", "J", "K"].includes(row)) return 5000;
-
-      return 4000;
-    }
-
-    const seatPrices = activeClaims.map((claim) =>
-      getSeatPricePaise(claim.seat_id)
-    );
-
-    if (
-      activeClaims.length !== booking.quantity ||
-      uniqueSeatIds.size !== booking.quantity ||
-      seatPrices.some((price) => price === null)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "The reserved seats could not be validated.",
-        },
-        { status: 409 }
-      );
-    }
-
-    const expectedTotalPaise = seatPrices.reduce(
-      (total, price) => total + price,
-      0
-    );
-
-    if (Number(booking.amount_paise) !== expectedTotalPaise) {
-      console.error("Booking amount mismatch:", {
-        bookingId,
-        storedAmount: booking.amount_paise,
-        expectedTotalPaise,
-      });
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: "The booking amount does not match the reserved seats.",
-        },
-        { status: 409 }
-      );
-    }
-
-    // 4. Verify the payment directly with Razorpay.
+    // 3. Verify the payment directly with Razorpay BEFORE checking
+    // reservation expiry. An expired reservation does not undo a capture.
     const razorpay = new Razorpay({
       key_id: keyId,
       key_secret: keySecret,
     });
 
+    let payment;
 
-    const payment = await razorpay.payments.fetch(paymentId);
+try {
+  payment = await razorpay.payments.fetch(paymentId);
+} catch (error) {
+  console.error("Razorpay payment lookup failed:", {
+    bookingId,
+    orderId,
+    paymentId,
+    error: error?.message,
+  });
+
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        "Could not confirm the payment with Razorpay. If money was deducted, do not pay again; retry verification or contact the event team.",
+      bookingId,
+      paymentId,
+      retryVerification: true,
+    },
+    { status: 502 }
+  );
+}
 
     if (
       payment.order_id !== orderId ||
-      payment.amount !== booking.amount_paise ||
+      Number(payment.amount) !== Number(booking.amount_paise) ||
       payment.currency !== "INR" ||
       payment.status !== "captured"
     ) {
@@ -229,13 +181,83 @@ export async function POST(request) {
         {
           success: false,
           message:
-            "Payment is not captured or does not match this booking.",
+            "Razorpay has not confirmed a captured payment matching this booking.",
         },
         { status: 409 }
       );
     }
 
-    // 4. Atomically finalize the booking and seats.
+    // 4. Validate the permanent seat selection, not expiring seat claims.
+    const {
+      data: savedSeats,
+      error: savedSeatsError,
+    } = await supabaseAdmin
+      .from("booking_seats")
+      .select("seat_id, seat_price_paise")
+      .eq("booking_id", bookingId)
+      .eq("show_id", booking.show_id)
+      .order("seat_id", { ascending: true });
+
+    if (savedSeatsError) {
+      console.error("Saved seat lookup error:", savedSeatsError.message);
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment was captured, but the saved seat selection could not be checked. Contact the event team with your payment ID.",
+          bookingId,
+          paymentId,
+        },
+        { status: 500 }
+      );
+    }
+
+    const seats = savedSeats ?? [];
+    const uniqueSeatIds = new Set(seats.map((seat) => seat.seat_id));
+
+    const invalidPrice = seats.some((seat) => {
+      const expectedPrice = getSeatPricePaise(seat.seat_id);
+
+      return (
+        expectedPrice === null ||
+        Number(seat.seat_price_paise) !== expectedPrice ||
+        (booking.show_id === "show-1" && seat.seat_id.startsWith("A-"))
+      );
+    });
+
+    const expectedTotalPaise = seats.reduce(
+      (total, seat) => total + Number(seat.seat_price_paise),
+      0
+    );
+
+    if (
+      seats.length !== Number(booking.quantity) ||
+      uniqueSeatIds.size !== Number(booking.quantity) ||
+      invalidPrice ||
+      expectedTotalPaise !== Number(booking.amount_paise)
+    ) {
+      console.error("Saved seat validation failed:", {
+        bookingId,
+        savedSeatCount: seats.length,
+        expectedQuantity: booking.quantity,
+        savedTotalPaise: expectedTotalPaise,
+        bookingAmountPaise: booking.amount_paise,
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payment was captured, but the original seat selection could not be validated. Contact the event team with your payment ID.",
+          bookingId,
+          paymentId,
+        },
+        { status: 409 }
+      );
+    }
+
+    // 5. Atomically finalize the booking, recover safe claims, and create tickets.
     const { data: finalized, error: finalizeError } =
       await supabaseAdmin.rpc("finalize_booking_payment", {
         p_booking_id: bookingId,
@@ -244,16 +266,13 @@ export async function POST(request) {
       });
 
     if (finalizeError) {
-      console.error(
-        "Finalize payment error:",
-        finalizeError.message
-      );
+      console.error("Finalize payment error:", finalizeError.message);
 
       return NextResponse.json(
         {
           success: false,
           message:
-            "Payment was verified, but booking confirmation needs attention. Keep your payment ID for support.",
+            "Payment was captured, but booking confirmation needs attention. Keep your payment ID for support.",
           bookingId,
           paymentId,
         },
@@ -266,7 +285,7 @@ export async function POST(request) {
         {
           success: false,
           message:
-            "Payment was verified, but the reservation could not be confirmed. Contact the event team with your payment ID.",
+            "Payment was captured, but the seats could not be safely confirmed. Contact the event team with your payment ID. Do not pay again.",
           bookingId,
           paymentId,
         },
@@ -274,16 +293,15 @@ export async function POST(request) {
       );
     }
 
-    // 5. Retrieve every ticket generated by the SQL function.
-    const { data: tickets, error: ticketError } =
-      await supabaseAdmin
-        .from("tickets")
-        .select(
-          "id, booking_id, ticket_code, seat_id, created_at, barcode_token, show_id"
-        )
-        .eq("booking_id", bookingId)
-        .eq("show_id", booking.show_id)
-        .order("seat_id", { ascending: true });
+    // 6. Retrieve the tickets created by the SQL function.
+    const { data: tickets, error: ticketError } = await supabaseAdmin
+      .from("tickets")
+      .select(
+        "id, booking_id, ticket_code, seat_id, created_at, barcode_token, show_id"
+      )
+      .eq("booking_id", bookingId)
+      .eq("show_id", booking.show_id)
+      .order("seat_id", { ascending: true });
 
     if (ticketError) {
       console.error("Ticket lookup error:", ticketError.message);
@@ -301,8 +319,7 @@ export async function POST(request) {
       );
     }
 
-    // 6. Confirm that one ticket exists for every booked seat.
-    if (!tickets || tickets.length !== booking.quantity) {
+    if (!tickets || tickets.length !== Number(booking.quantity)) {
       console.error("Ticket count mismatch:", {
         bookingId,
         expected: booking.quantity,
@@ -314,7 +331,7 @@ export async function POST(request) {
           success: false,
           bookingConfirmed: true,
           message:
-            "Your booking is confirmed, but the ticket count does not match the booking quantity. Contact the event team.",
+            "Your booking is confirmed, but the ticket count needs attention. Contact the event team.",
           bookingId,
           paymentId,
           expectedTickets: booking.quantity,
@@ -324,11 +341,10 @@ export async function POST(request) {
       );
     }
 
-    // 7. Return all tickets to the frontend.
+    // 7. Return tickets to the frontend.
     return NextResponse.json({
       success: true,
-      message:
-        "Payment verified, booking confirmed, and all tickets retrieved.",
+      message: "Payment verified, booking confirmed, and tickets retrieved.",
       bookingId,
       paymentId,
       tickets: tickets.map((ticket) => ({
@@ -346,7 +362,7 @@ export async function POST(request) {
       {
         success: false,
         message:
-          "Could not verify payment. Please retain your payment details.",
+          "Could not complete payment verification. If money was deducted, do not pay again; retain your payment ID and contact the event team.",
       },
       { status: 500 }
     );
