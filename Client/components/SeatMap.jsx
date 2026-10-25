@@ -1063,7 +1063,7 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
 
               <p>
                 <strong>Before proceeding:</strong> Please check
-                your selected seats and total amount carefully. Scroll down for payment after selecting the seats.
+                your selected seats and total amount carefully. Scroll down for payment after selecting the seats and clicking continue.
               </p>
 
               <p>
