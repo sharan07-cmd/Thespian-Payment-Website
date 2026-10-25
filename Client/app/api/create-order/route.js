@@ -223,6 +223,7 @@ export async function POST(request) {
         storedAmountPaise: booking.amount_paise,
         expectedTotalPaise,
         seatIds,
+        quantity: booking.quantity,
       });
 
       return NextResponse.json(
