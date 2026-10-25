@@ -122,7 +122,7 @@ export async function POST(request) {
     // 2. Confirm that the show exists and is active.
     const { data: show, error: showError } = await supabaseAdmin
       .from("shows")
-      .select("id, is_active")
+      .select("id, active")
       .eq("id", booking.show_id)
       .maybeSingle();
 
@@ -131,7 +131,7 @@ export async function POST(request) {
       return errorResponse("Could not verify the show.", 500);
     }
 
-    if (!show || show.is_active !== true) {
+    if (!show || show.active !== true) {
       return errorResponse(
         "This show is not currently available for booking.",
         409
