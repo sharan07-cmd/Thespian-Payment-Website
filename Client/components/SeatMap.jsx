@@ -2,7 +2,7 @@
 
 
 import { jsPDF } from "jspdf";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { generateSeatLayout, getSeatPrice } from "@/lib/seatLayout";
 import Checkout from "@/components/Checkout";
 import QRCode from "qrcode";
@@ -14,6 +14,9 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
   const [showQuantityModal, setShowQuantityModal] = useState(true);
   const [unavailableSeats, setUnavailableSeats] = useState(() => new Set());
 
+  const [availabilityReady, setAvailabilityReady] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(false);
+
   const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,6 +26,8 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
   const [reservedSeats, setReservedSeats] = useState([]);
   const [paymentMessage, setPaymentMessage] = useState("");
   const [confirmedTicket, setConfirmedTicket] = useState(null);
+  const [emailMessage, setEmailMessage] = useState("");
+  const emailAttemptedBooking = useRef(null);
 
   const [customer, setCustomer] = useState({
     name: "",
@@ -30,41 +35,64 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
     phone: "",
   });
 
-  useEffect(() => {
+
+useEffect(() => {
   let active = true;
+  let inFlight = false;
+  const controller = new AbortController();
+
+  setAvailabilityReady(false);
+  setAvailabilityError(false);
+
+  setSelected(new Set());
 
   async function fetchAvailability() {
+    if (inFlight) return;
+    inFlight = true;
+
     try {
       const response = await fetch(
         `/api/seats?showId=${encodeURIComponent(showId)}`,
         {
           cache: "no-store",
+          signal: controller.signal,
         }
       );
 
       if (!response.ok) {
-        throw new Error("Could not fetch seat availability");
+        throw new Error("Could not fetch seat availability.");
       }
 
       const data = await response.json();
-      const unavailable = new Set(data.unavailableSeats ?? []);
 
-      if (active) {
-        setUnavailableSeats(unavailable);
-
-        // Remove selected seats that another user has reserved.
-        setSelected((previous) => {
-          const next = new Set(previous);
-
-          for (const seatId of unavailable) {
-            next.delete(seatId);
-          }
-
-          return next;
-        });
+      if (!Array.isArray(data.unavailableSeats)) {
+        throw new Error("Invalid seat availability response.");
       }
+
+      if (!active) return;
+
+      const unavailable = new Set(data.unavailableSeats);
+      setUnavailableSeats(unavailable);
+
+      setSelected((previous) => {
+        const next = new Set(previous);
+
+        for (const seatId of unavailable) {
+          next.delete(seatId);
+        }
+
+        return next;
+      });
+
+      setAvailabilityReady(true);
+      setAvailabilityError(false);
     } catch (error) {
+      if (!active || error.name === "AbortError") return;
+
       console.error("Availability refresh failed:", error);
+      setAvailabilityError(true);
+    } finally {
+      inFlight = false;
     }
   }
 
@@ -74,12 +102,100 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
 
   return () => {
     active = false;
+    controller.abort();
     clearInterval(intervalId);
   };
 }, [showId]);
 
 
+  
+  useEffect(() => {
+    if (!confirmedTicket?.bookingId || !confirmedTicket?.paymentId) {
+      return;
+    }
+
+    const bookingId = confirmedTicket.bookingId;
+
+    // Avoid automatically sending the same booking twice in this component.
+    if (emailAttemptedBooking.current === bookingId) {
+      return;
+    }
+
+    emailAttemptedBooking.current = bookingId;
+
+    let cancelled = false;
+
+    async function emailTickets() {
+      setEmailMessage("Preparing your PDF tickets and emailing them...");
+
+      try {
+        const pdfBlob = await buildTicketsPDF();
+
+        if (!pdfBlob) {
+          throw new Error("Could not generate your ticket PDF.");
+        }
+
+        const buffer = await pdfBlob.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+
+        let binary = "";
+        const chunkSize = 0x8000;
+
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(
+            ...bytes.subarray(i, i + chunkSize)
+          );
+        }
+
+        const pdfBase64 = btoa(binary);
+
+        const response = await fetch("/api/email-tickets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            bookingId: confirmedTicket.bookingId,
+            paymentId: confirmedTicket.paymentId,
+            pdfBase64,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.message || "The ticket email could not be sent."
+          );
+        }
+
+        if (!cancelled) {
+          setEmailMessage(
+            "Your PDF tickets have been emailed successfully!"
+          );
+        }
+      } catch (error) {
+        console.error("Automatic ticket email failed:", error);
+
+        if (!cancelled) {
+          setEmailMessage(
+            "Your booking is confirmed, but the email could not be sent. Please use Download All Tickets (PDF)."
+          );
+        }
+      }
+    }
+
+    emailTickets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmedTicket]);
+
+
+
   function toggleSeat(seat) {
+    if (!availabilityReady || availabilityError) return;
     if (
       seat.status === "booked" ||
       unavailableSeats.has(seat.id)
@@ -108,6 +224,12 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
 
   
   async function reserveSeats() {
+    if (!availabilityReady || availabilityError) {
+      setMessage(
+        "Seat availability could not be verified. Please wait for the seat map to refresh."
+      );
+      return;
+    }
     if (selectedList.length !== ticketQuantity) {
       setMessage(
         `Please select exactly ${ticketQuantity} seats to continue.`
@@ -163,12 +285,25 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
           }
         );
 
-        if (response.ok) {
-          const data = await response.json();
-          setUnavailableSeats(new Set(data.unavailableSeats ?? []));
+        if (!response.ok) {
+          throw new Error("Could not refresh seat availability.");
         }
+
+        const data = await response.json();
+
+        if (!Array.isArray(data.unavailableSeats)) {
+          throw new Error("Invalid seat availability response.");
+        }
+
+        setUnavailableSeats(new Set(data.unavailableSeats));
+        setAvailabilityReady(true);
+        setAvailabilityError(false);
       } catch (refreshError) {
-        console.error("Could not refresh seat availability:", refreshError);
+        console.error(
+          "Could not refresh seat availability:",
+          refreshError
+        );
+        setAvailabilityError(true);
       }
     } finally {
       setLoading(false);
@@ -203,7 +338,7 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
   
   
 
-  async function downloadTicketsPDF() {
+  async function buildTicketsPDF() {
     if (
       !confirmedTicket ||
       !Array.isArray(confirmedTicket.tickets) ||
@@ -473,8 +608,30 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
       );
     }
 
-    doc.save(`thespian-tickets-${bookingId}.pdf`);
+    return doc.output("blob");
   }
+  async function downloadTicketsPDF() {
+  try {
+    const blob = await buildTicketsPDF();
+
+    if (!blob) return;
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `thespian-tickets-${confirmedTicket.bookingId}.pdf`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    console.error("PDF download failed:", error);
+    window.alert("Could not generate the PDF. Please try again.");
+  }
+}
 
   if (confirmedTicket) {
     return (
@@ -535,6 +692,11 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
           <p className="successNote">
             Keep your ticket code for reference.
           </p>
+          {emailMessage && (
+            <p className="successNote" role="status">
+              {emailMessage}
+            </p>
+          )}
           
       <div className="ticketActionButtons">
           <button
@@ -806,6 +968,7 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
     );
   }
 
+ 
   return (
     <div className="wrap">
       <header className="head">
@@ -879,91 +1042,124 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
             <button
               type="button"
               className="quantityContinue"
+              disabled={!availabilityReady || availabilityError}
+
               onClick={() => {
                 setSelected(new Set());
                 setShowQuantityModal(false);
               }}
             >
-              Select Seats
+              {!availabilityReady
+                ? "Loading Seats..."
+                : availabilityError
+                  ? "Waiting for Connection..."
+                  : "Select Seats"}
             </button>
           </section>
         </div>
       )}
 
 
+      
       <div className="mapScroll">
-        <div className="map">
-          {rows.map((row) => (
-            <div className="row" key={row.rowLabel}>
-              <span className="rowLabel">{row.rowLabel}</span>
-              {/* Note the inline position: relative here */}
-              <div className="blocks" style={{ position: "relative" }}>
-                
-                {/* 1. Conditionally render the arrow for Row H with INLINE styles to fix the layout bug */}
-                {row.rowLabel === "H" && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: "50%",
-                      top: "50%",
-                      transform: "translate(-50%, -50%)",
-                      color:  "#e8c75a",
-                      pointerEvents: "none",
-                      zIndex: 0,
-                      animation: "arrowShimmer 2.2s ease-in-out infinite",
-                      filter: "drop-shadow(0 0 4px rgba(255, 215, 100, 0.75))",
-                    }}
-                  >
-                    <svg aria-hidden="true" width="24" height="140" viewBox="0 0 24 140" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 140V4" />
-                      <path d="M5 11l7-7 7 7" />
-                    </svg>
-                  </div>
-                )}
+        {!availabilityReady || availabilityError ? (
+          <div className="seat-map-loading" role="status">
+            {availabilityError
+              ? "Unable to verify seat availability. Please wait for the connection to recover..."
+              : "Loading live seat availability..."}
+          </div>
+        ) : (
+          <div className="map">
+            {rows.map((row) => (
+              <div className="row" key={row.rowLabel}>
+                <span className="rowLabel">{row.rowLabel}</span>
 
-                {/* 2. Map through the seat blocks normally */}
-                {row.blocks.map((block, bi) => (
-                  <div className="block" key={bi}>
-                    {block.map((seat) => {
-                      if (seat.status === "empty") {
-                        return <div key={seat.id} className="seat empty" />;
-                      }
+                <div className="blocks" style={{ position: "relative" }}>
+                  {row.rowLabel === "H" && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "50%",
+                        top: "50%",
+                        transform: "translate(-50%, -50%)",
+                        color: "#e8c75a",
+                        pointerEvents: "none",
+                        zIndex: 0,
+                        animation: "arrowShimmer 2.2s ease-in-out infinite",
+                        filter:
+                          "drop-shadow(0 0 4px rgba(255, 215, 100, 0.75))",
+                      }}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        width="24"
+                        height="140"
+                        viewBox="0 0 24 140"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 140V4" />
+                        <path d="M5 11l7-7 7 7" />
+                      </svg>
+                    </div>
+                  )}
 
-                      return (
-                        <button
-                          key={seat.id}
-                          type="button"
-                          className={`seat ${
-                            unavailableSeats.has(seat.id) || seat.status === "booked"
-                              ? "booked"
-                              : seat.status
-                          } ${
-                            getSeatPrice(row.rowNumber) === 75
-                              ? "premium"
-                              : getSeatPrice(row.rowNumber) === 50
-                                ? "standard"
-                                : "economy"
-                          } ${selected.has(seat.id) ? "selected" : ""}`}
-                          disabled={
-                            showQuantityModal ||
-                            showForm ||
-                            showCheckout ||
-                            seat.status === "booked" ||
-                            unavailableSeats.has(seat.id)
-                          }
-                          onClick={() => toggleSeat(seat)}
-                          aria-label={`Seat ${seat.label}, ₹${getSeatPrice(row.rowNumber)}`}
-                          title={`Seat ${seat.label} — ₹${getSeatPrice(row.rowNumber)}`}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
+                  {row.blocks.map((block, bi) => (
+                    <div className="block" key={bi}>
+                      {block.map((seat) => {
+                        if (seat.status === "empty") {
+                          return (
+                            <div key={seat.id} className="seat empty" />
+                          );
+                        }
+
+                        const isUnavailable =
+                          seat.status === "booked" ||
+                          unavailableSeats.has(seat.id);
+
+                        const price = getSeatPrice(row.rowNumber);
+
+                        return (
+                          <button
+                            key={seat.id}
+                            type="button"
+                            className={`seat ${
+                              isUnavailable ? "booked" : seat.status
+                            } ${
+                              price === 75
+                                ? "premium"
+                                : price === 50
+                                  ? "standard"
+                                  : "economy"
+                            } ${selected.has(seat.id) ? "selected" : ""}`}
+                            disabled={
+                              !availabilityReady ||
+                              availabilityError ||
+                              showQuantityModal ||
+                              showForm ||
+                              showCheckout ||
+                              isUnavailable
+                            }
+                            onClick={() => toggleSeat(seat)}
+                            aria-label={`Seat ${seat.label}, ₹${price}`}
+                            title={`Seat ${seat.label} — ₹${price}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                <span className="rowLabel rowLabelRight">
+                  {row.rowLabel}
+                </span>
               </div>
-              <span className="rowLabel rowLabelRight">{row.rowLabel}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="legend">
@@ -992,6 +1188,18 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
         </span>
       </div>
 
+      {/* Seat availability status */}
+        {!availabilityReady ? (
+          <p role="status">
+            Loading seat availability. Please wait...
+          </p>
+        ) : availabilityError ? (
+          <p role="alert">
+            Unable to verify seat availability. Seat selection is paused
+            until the connection is restored.
+          </p>
+        ) : null}
+
       <div className="summaryBar">
         <div className="summaryInfo">
           {selectedList.length === 0 ? (
@@ -1011,7 +1219,11 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
               <button 
                 type="button"
                 className="continueBtn"
-                disabled={selectedList.length !== ticketQuantity}
+               disabled={
+                  !availabilityReady ||
+                  availabilityError ||
+                  selectedList.length !== ticketQuantity
+                }
                 onClick={() => {
                   if (selectedList.length !== ticketQuantity) {
                     setMessage(
@@ -1278,6 +1490,19 @@ export default function SeatMap({ showId, showTitle, showSubtitle, onBackToShowS
           color: var(--ink);
           opacity: 0.85;
           box-shadow: 0 12px 40px -8px rgba(122, 31, 43, 0.65);
+        }
+
+        .seat-map-loading {
+          min-height: 300px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          color: #c9a227;
+          background: #1a1012;
+          border: 1px solid #c9a227;
+          border-radius: 12px;
+          padding: 24px;
         }
 
         .mapScroll {
